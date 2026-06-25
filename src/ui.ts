@@ -209,12 +209,22 @@ async function promptForAdvisor(advisor: Advisor): Promise<Config> {
   const model = await promptModelValue(advisor);
   if (advisor === "kimi") return { advisor, model };
 
-  const thinking = await promptThinkingValue(advisor);
+  const thinking = await promptThinkingValue(advisor, undefined, model);
   return parseConfig({ advisor, model, thinking });
 }
 
 async function promptForModel(config: Config): Promise<Config> {
   const model = await promptModelValue(config.advisor, config.model);
+  if (config.advisor === "amp") {
+    const options = getThinkingOptions("amp", model);
+    return parseConfig({
+      ...config,
+      model,
+      thinking: options.includes(config.thinking)
+        ? config.thinking
+        : options[0],
+    });
+  }
   return parseConfig({ ...config, model });
 }
 
@@ -223,7 +233,11 @@ async function promptForThinking(config: Config): Promise<Config> {
     log.info("Kimi does not expose a thinking/effort setting.");
     return config;
   }
-  const thinking = await promptThinkingValue(config.advisor, config.thinking);
+  const thinking = await promptThinkingValue(
+    config.advisor,
+    config.thinking,
+    config.model,
+  );
   return parseConfig({ ...config, thinking });
 }
 
@@ -267,11 +281,11 @@ async function promptModelValue(advisor: Advisor, initialValue?: string) {
 async function promptThinkingValue(
   advisor: Exclude<Advisor, "kimi">,
   initialValue?: string,
+  model?: string,
 ) {
-  const options = getThinkingOptions(advisor);
+  const options = getThinkingOptions(advisor, model);
   const thinking = await select({
-    message:
-      advisor === "amp" ? "Choose review thinking" : "Choose thinking/effort",
+    message: advisor === "amp" ? "Choose effort" : "Choose thinking/effort",
     initialValue:
       initialValue && options.includes(initialValue)
         ? initialValue

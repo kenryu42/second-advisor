@@ -2,9 +2,11 @@ import { expect, test } from "bun:test";
 import {
   advisorChoices,
   ampThinking,
+  ampThinkingByMode,
   buildAdvisorCommand,
   claudeModels,
   getModelListCommand,
+  getThinkingOptions,
   summarizeConfig,
 } from "../src/advisors.js";
 
@@ -129,6 +131,14 @@ test("declares Amp effort choices", () => {
     "xhigh",
     "max",
   ]);
+  expect(ampThinkingByMode.rush).toEqual(["none", "minimal", "low", "medium"]);
+  expect(getThinkingOptions("amp", "rush")).toEqual([
+    "none",
+    "minimal",
+    "low",
+    "medium",
+  ]);
+  expect(getThinkingOptions("amp", "smart")).toEqual([...ampThinking]);
 });
 
 test("declares model discovery commands and unsupported advisors", () => {

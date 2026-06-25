@@ -20,6 +20,13 @@ test("parses and validates persisted config", () => {
     model: "smart",
     thinking: "xhigh",
   });
+  expect(
+    parseConfig({ advisor: "amp", model: "rush", thinking: "medium" }),
+  ).toEqual({
+    advisor: "amp",
+    model: "rush",
+    thinking: "medium",
+  });
   expect(parseConfig({ advisor: "kimi", model: "kimi-k2" })).toEqual({
     advisor: "kimi",
     model: "kimi-k2",
@@ -29,6 +36,9 @@ test("parses and validates persisted config", () => {
   ).toThrow("Invalid Amp mode");
   expect(() =>
     parseConfig({ advisor: "amp", model: "smart", thinking: "what" }),
+  ).toThrow("Invalid Amp thinking");
+  expect(() =>
+    parseConfig({ advisor: "amp", model: "rush", thinking: "high" }),
   ).toThrow("Invalid Amp thinking");
   expect(() =>
     parseConfig({

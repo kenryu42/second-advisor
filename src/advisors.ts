@@ -19,6 +19,11 @@ export const ampThinking = [
   "xhigh",
   "max",
 ] as const;
+export const ampThinkingByMode = {
+  deep: ampThinking,
+  rush: ["none", "minimal", "low", "medium"],
+  smart: ampThinking,
+} as const;
 export const claudeModels = ["haiku", "sonnet", "opus"] as const;
 export const claudeThinking = [
   "low",
@@ -179,11 +184,19 @@ export function summarizeConfig(config: Config) {
   return `advisor ${config.advisor}, model ${config.model}, thinking ${config.thinking}`;
 }
 
-export function getThinkingOptions(advisor: Exclude<Advisor, "kimi">) {
+export function getThinkingOptions(
+  advisor: Exclude<Advisor, "kimi">,
+  model?: string,
+) {
   if (advisor === "claude") return [...claudeThinking];
   if (advisor === "codex") return [...codexThinking];
   if (advisor === "pi") return [...piThinking];
-  if (advisor === "amp") return [...ampThinking];
+  if (advisor === "amp") {
+    if (model && model in ampThinkingByMode) {
+      return [...ampThinkingByMode[model as keyof typeof ampThinkingByMode]];
+    }
+    return [...ampThinking];
+  }
   return ["low", "medium", "high", "xhigh"];
 }
 

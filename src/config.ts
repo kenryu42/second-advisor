@@ -9,6 +9,7 @@ import {
   claudeModels,
   claudeThinking,
   codexThinking,
+  getThinkingOptions,
   isAdvisor,
   piThinking,
 } from "./advisors.js";
@@ -41,6 +42,9 @@ export function parseConfig(value: unknown): Config {
       throw new Error("Invalid Amp mode");
     }
     if (!ampThinking.includes(value.thinking as (typeof ampThinking)[number])) {
+      throw new Error("Invalid Amp thinking");
+    }
+    if (!getThinkingOptions("amp", value.model).includes(value.thinking)) {
       throw new Error("Invalid Amp thinking");
     }
     return {
