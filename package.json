@@ -1,11 +1,40 @@
 {
   "name": "second-advisor",
   "version": "0.1.0",
-  "private": true,
+  "description": "Ask another coding CLI for a second opinion.",
   "type": "module",
   "bin": {
     "second-advisor": "src/index.ts",
     "sa": "src/index.ts"
+  },
+  "files": [
+    "src"
+  ],
+  "keywords": [
+    "ai",
+    "agent",
+    "cli",
+    "code-review",
+    "codex"
+  ],
+  "author": {
+    "name": "J Liew",
+    "email": "jliew@420024lab.com"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kenryu42/second-advisor.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kenryu42/second-advisor/issues"
+  },
+  "homepage": "https://github.com/kenryu42/second-advisor#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "bun": ">=1.3.0"
   },
   "scripts": {
     "sa": "bun run src/index.ts",
