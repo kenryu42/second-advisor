@@ -1,0 +1,12 @@
+pre-commit:
+  parallel: true
+  commands:
+    biome:
+      glob: "*.{js,ts,jsx,tsx,mjs,cjs}"
+      run: bun run lint:staged -- {staged_files}
+      stage_fixed: true
+
+pre-push:
+  commands:
+    check:
+      run: bun run check
