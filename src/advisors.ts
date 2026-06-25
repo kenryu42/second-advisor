@@ -10,7 +10,15 @@ export const advisorChoices = [
 ] as const;
 
 export const ampModes = ["deep", "rush", "smart"] as const;
-export const ampThinking = ["low", "high"] as const;
+export const ampThinking = [
+  "none",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+] as const;
 export const claudeModels = ["haiku", "sonnet", "opus"] as const;
 export const claudeThinking = [
   "low",

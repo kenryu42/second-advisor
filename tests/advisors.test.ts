@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import {
   advisorChoices,
+  ampThinking,
   buildAdvisorCommand,
   claudeModels,
   getModelListCommand,
@@ -116,6 +117,18 @@ test("builds non-interactive commands for every advisor", () => {
 
 test("declares Claude model aliases", () => {
   expect(claudeModels).toEqual(["haiku", "sonnet", "opus"]);
+});
+
+test("declares Amp effort choices", () => {
+  expect(ampThinking).toEqual([
+    "none",
+    "minimal",
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max",
+  ]);
 });
 
 test("declares model discovery commands and unsupported advisors", () => {
