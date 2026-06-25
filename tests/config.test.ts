@@ -3,6 +3,17 @@ import { parseConfig } from "../src/config.js";
 
 test("parses and validates persisted config", () => {
   expect(
+    parseConfig({
+      advisor: "claude",
+      model: "sonnet",
+      thinking: "high",
+    }),
+  ).toEqual({
+    advisor: "claude",
+    model: "sonnet",
+    thinking: "high",
+  });
+  expect(
     parseConfig({ advisor: "amp", model: "smart", thinking: "low" }),
   ).toEqual({
     advisor: "amp",
@@ -16,6 +27,13 @@ test("parses and validates persisted config", () => {
   expect(() =>
     parseConfig({ advisor: "amp", model: "sonnet", thinking: "low" }),
   ).toThrow("Invalid Amp mode");
+  expect(() =>
+    parseConfig({
+      advisor: "claude",
+      model: "claude-sonnet",
+      thinking: "high",
+    }),
+  ).toThrow("Invalid Claude model");
   expect(() =>
     parseConfig({ advisor: "kimi", model: "kimi-k2", thinking: "high" }),
   ).toThrow("Kimi does not support thinking");

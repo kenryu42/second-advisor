@@ -6,6 +6,7 @@ import {
   ampModes,
   ampThinking,
   type Config,
+  claudeModels,
   claudeThinking,
   codexThinking,
   isAdvisor,
@@ -50,6 +51,9 @@ export function parseConfig(value: unknown): Config {
   }
 
   if (value.advisor === "claude") {
+    if (!claudeModels.includes(value.model as (typeof claudeModels)[number])) {
+      throw new Error("Invalid Claude model");
+    }
     if (
       !claudeThinking.includes(
         value.thinking as (typeof claudeThinking)[number],
@@ -59,7 +63,7 @@ export function parseConfig(value: unknown): Config {
     }
     return {
       advisor: value.advisor,
-      model: value.model,
+      model: value.model as (typeof claudeModels)[number],
       thinking: value.thinking as (typeof claudeThinking)[number],
     };
   }

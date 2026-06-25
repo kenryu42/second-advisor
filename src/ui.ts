@@ -14,6 +14,7 @@ import {
   ampModes,
   buildAdvisorCommand,
   type Config,
+  claudeModels,
   getModelListCommand,
   getThinkingOptions,
   isAdvisor,
@@ -117,25 +118,26 @@ export async function runModels(input?: string) {
     );
     return;
   }
+  if (advisor === "claude") {
+    log.message(
+      `Available Claude models:\n${claudeModels.map((model) => `- ${model}`).join("\n")}`,
+    );
+    return;
+  }
 
-  const command = getModelListCommand(advisor);
-  if (!command) {
+  if (!getModelListCommand(advisor)) {
     log.info(
       `${advisor} does not expose a reliable model-list command. Enter the model manually.`,
     );
     return;
   }
 
-  const result = await runCommand(command.command, command.args, {
-    pipeOutput: true,
-  });
-  if (result.exitCode !== 0) {
-    log.error(
-      result.stderr || `Failed to list models with ${command.command}.`,
-    );
+  const choices = await loadModelChoices(advisor);
+  if (choices.length === 0) {
+    log.error(`Failed to list models with ${advisor}.`);
     return;
   }
-  log.message(result.stdout.trim() || "No models printed.");
+  log.message(choices.map((choice) => `- ${choice}`).join("\n"));
 }
 
 export async function runDoctor() {
@@ -281,6 +283,7 @@ async function promptThinkingValue(
 }
 
 async function loadChoicesWithSpinner(advisor: Advisor) {
+  if (advisor === "claude") return loadModelChoices(advisor);
   if (!getModelListCommand(advisor)) return [];
 
   const s = spinner();

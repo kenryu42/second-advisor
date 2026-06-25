@@ -11,6 +11,7 @@ export const advisorChoices = [
 
 export const ampModes = ["deep", "rush", "smart"] as const;
 export const ampThinking = ["low", "high"] as const;
+export const claudeModels = ["haiku", "sonnet", "opus"] as const;
 export const claudeThinking = [
   "low",
   "medium",
@@ -36,7 +37,9 @@ type ConfigWithThinking<T extends Advisor, U extends string> = ConfigBase<T> & {
 };
 
 export type Config =
-  | ConfigWithThinking<"claude", (typeof claudeThinking)[number]>
+  | (ConfigWithThinking<"claude", (typeof claudeThinking)[number]> & {
+      model: (typeof claudeModels)[number];
+    })
   | ConfigWithThinking<"codex", (typeof codexThinking)[number]>
   | ConfigWithThinking<"opencode", string>
   | ConfigWithThinking<"grok", string>

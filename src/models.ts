@@ -1,8 +1,14 @@
-import { type Advisor, ampModes, getModelListCommand } from "./advisors.js";
+import {
+  type Advisor,
+  ampModes,
+  claudeModels,
+  getModelListCommand,
+} from "./advisors.js";
 import { runCommand } from "./process.js";
 
 export async function loadModelChoices(advisor: Advisor) {
   if (advisor === "amp") return [...ampModes];
+  if (advisor === "claude") return [...claudeModels];
   const command = getModelListCommand(advisor);
   if (!command) return [];
 
@@ -10,12 +16,13 @@ export async function loadModelChoices(advisor: Advisor) {
     pipeOutput: true,
   });
   if (result.exitCode !== 0) return [];
-  return extractModelNames(advisor, result.stdout).slice(0, 80);
+  return parseModelChoices(advisor, result.stdout).slice(0, 80);
 }
 
-function extractModelNames(advisor: Advisor, output: string) {
-  if (advisor === "codex" || advisor === "kimi")
-    return extractStringsFromJson(output);
+export function parseModelChoices(advisor: Advisor, output: string) {
+  if (advisor === "codex") return extractCodexModels(output);
+  if (advisor === "grok") return extractGrokModels(output);
+  if (advisor === "kimi") return extractKimiModels(output);
   if (advisor === "droid") return extractDroidModels(output);
   return output
     .split(/\r?\n/)
@@ -25,11 +32,40 @@ function extractModelNames(advisor: Advisor, output: string) {
     .filter((line) => line.length > 0);
 }
 
-function extractStringsFromJson(output: string) {
+function extractKimiModels(output: string) {
   try {
-    const seen = new Set<string>();
-    collectStrings(JSON.parse(output), seen);
-    return [...seen].filter((value) => looksLikeModelName(value));
+    const json = JSON.parse(output);
+    if (!isRecord(json) || !isRecord(json.models)) return [];
+    return Object.keys(json.models).filter((model) => model.length > 0);
+  } catch {
+    return [];
+  }
+}
+
+function extractGrokModels(output: string) {
+  const models = output.match(/Available models:\n(?<body>[\s\S]*)/)?.groups
+    ?.body;
+  if (!models) return [];
+  return models
+    .split(/\r?\n/)
+    .map((line) =>
+      line
+        .trim()
+        .replace(/^[-*]\s*/, "")
+        .replace(/\s+\(default\)$/, ""),
+    )
+    .filter((value) => value.length > 0);
+}
+
+function extractCodexModels(output: string) {
+  try {
+    const json = JSON.parse(output);
+    if (!isRecord(json) || !Array.isArray(json.models)) return [];
+    return json.models
+      .map((model) => (isRecord(model) ? model.slug : undefined))
+      .filter(
+        (slug): slug is string => typeof slug === "string" && slug.length > 0,
+      );
   } catch {
     return [];
   }
@@ -44,26 +80,6 @@ function extractDroidModels(output: string) {
     .split(/\r?\n/)
     .map((line) => line.trim().split(/\s+/)[0])
     .filter((value) => value.length > 0);
-}
-
-function collectStrings(value: unknown, seen: Set<string>) {
-  if (typeof value === "string") {
-    seen.add(value);
-    return;
-  }
-  if (Array.isArray(value)) {
-    value.map((item) => collectStrings(item, seen));
-    return;
-  }
-  if (!isRecord(value)) return;
-  Object.entries(value).forEach(([key, item]) => {
-    seen.add(key);
-    collectStrings(item, seen);
-  });
-}
-
-function looksLikeModelName(value: string) {
-  return /^[a-z0-9][a-z0-9._:/+-]+$/i.test(value) && value.length < 120;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

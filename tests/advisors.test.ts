@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import {
   advisorChoices,
   buildAdvisorCommand,
+  claudeModels,
   getModelListCommand,
   summarizeConfig,
 } from "../src/advisors.js";
@@ -111,6 +112,10 @@ test("builds non-interactive commands for every advisor", () => {
     command: "kimi",
     args: ["-m", "kimi-k2", "-p", "review this"],
   });
+});
+
+test("declares Claude model aliases", () => {
+  expect(claudeModels).toEqual(["haiku", "sonnet", "opus"]);
 });
 
 test("declares model discovery commands and unsupported advisors", () => {
