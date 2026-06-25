@@ -27,7 +27,127 @@ import {
   writeConfig,
 } from "./config.js";
 import { loadModelChoices } from "./models.js";
-import { getHelpArgs, resolveExecutable, runCommand } from "./process.js";
+import { getVersionArgs, resolveExecutable, runCommand } from "./process.js";
+
+type AdvisorDoctorCheck = {
+  cli: Advisor;
+  installed: boolean;
+  path: string;
+  version: string;
+};
+
+type Loader = {
+  start: (message: string) => void;
+  stop: (message: string) => void;
+};
+
+export async function runWithLoader<T>(
+  loader: Loader,
+  startMessage: string,
+  stopMessage: string,
+  work: () => Promise<T>,
+) {
+  loader.start(startMessage);
+  const result = await work();
+  loader.stop(stopMessage);
+  return result;
+}
+
+export function getInstalledAdvisorChoices(
+  resolve: (command: string) => string | undefined = resolveExecutable,
+) {
+  return advisorChoices.filter((advisor) => resolve(advisor));
+}
+
+export function normalizeVersionOutput(stdout: string, stderr: string) {
+  return (
+    `${stdout}\n${stderr}`
+      .split("\n")
+      .map((line) => line.trim())
+      .find((line) => line.length > 0) || "version unavailable"
+  );
+}
+
+export function formatAdvisorDoctorTable(rows: AdvisorDoctorCheck[]) {
+  const widths = {
+    cli: Math.max("CLI".length, ...rows.map((row) => row.cli.length)),
+    installed: "Installed".length,
+    version: Math.max(
+      "Version".length,
+      ...rows.map((row) => row.version.length),
+    ),
+    path: Math.max("Path".length, ...rows.map((row) => row.path.length)),
+  };
+  const headers = {
+    cli: "CLI",
+    installed: "Installed",
+    version: "Version",
+    path: "Path",
+  };
+  const formatRow = (row: {
+    cli: string;
+    installed: string;
+    version: string;
+    path: string;
+  }) =>
+    `│ ${row.cli.padEnd(widths.cli)} │ ${row.installed.padEnd(widths.installed)} │ ${row.version.padEnd(widths.version)} │ ${row.path.padEnd(widths.path)} │`;
+  const formatBorder = (left: string, middle: string, right: string) =>
+    [
+      left,
+      "─".repeat(widths.cli + 2),
+      middle,
+      "─".repeat(widths.installed + 2),
+      middle,
+      "─".repeat(widths.version + 2),
+      middle,
+      "─".repeat(widths.path + 2),
+      right,
+    ].join("");
+
+  return [
+    formatBorder("┌", "┬", "┐"),
+    formatRow(headers),
+    formatBorder("├", "┼", "┤"),
+    ...rows.map((row) =>
+      formatRow({
+        cli: row.cli,
+        installed: row.installed ? "yes" : "no",
+        version: row.version,
+        path: row.path,
+      }),
+    ),
+    formatBorder("└", "┴", "┘"),
+  ].join("\n");
+}
+
+async function getAdvisorDoctorChecks(): Promise<AdvisorDoctorCheck[]> {
+  return Promise.all(
+    advisorChoices.map(async (advisor) => {
+      const executable = resolveExecutable(advisor);
+      if (!executable) {
+        return {
+          cli: advisor,
+          installed: false,
+          path: "-",
+          version: "not installed",
+        };
+      }
+
+      const version = await runCommand(advisor, getVersionArgs(), {
+        pipeOutput: true,
+      });
+      return {
+        cli: advisor,
+        installed: true,
+        path: executable,
+        version:
+          version.exitCode === 0
+            ? normalizeVersionOutput(version.stdout, version.stderr)
+            : "version check failed",
+      };
+    }),
+  );
+}
 
 export async function runMenu() {
   intro("second-advisor");
@@ -142,6 +262,15 @@ export async function runModels(input?: string) {
 
 export async function runDoctor() {
   intro("second-advisor doctor");
+  const advisorChecks = await runWithLoader(
+    spinner(),
+    "Checking coding CLI versions",
+    "Checked coding CLI versions",
+    getAdvisorDoctorChecks,
+  );
+  log.message(
+    `Coding CLI versions:\n${formatAdvisorDoctorTable(advisorChecks)}`,
+  );
   const config = await readConfigIfPresent();
 
   if (!config) {
@@ -151,31 +280,28 @@ export async function runDoctor() {
   }
 
   log.success(`Config OK: ${summarizeConfig(config)}`);
-  const executable = resolveExecutable(config.advisor);
+  const advisorCheck = advisorChecks.find(
+    (check) => check.cli === config.advisor,
+  );
 
-  if (!executable) {
+  if (!advisorCheck?.installed) {
     log.error(`Executable not found on PATH: ${config.advisor}`);
     outro("Doctor failed.");
     return;
   }
 
-  log.success(`Executable found: ${executable}`);
+  if (advisorCheck.version === "version check failed") {
+    log.error(`${config.advisor} version check failed.`);
+    outro("Doctor failed.");
+    return;
+  }
+
   if (config.advisor === "amp" && !ampModes.includes(config.model)) {
     log.error(`Invalid Amp mode: ${config.model}`);
     outro("Doctor failed.");
     return;
   }
 
-  const help = await runCommand(config.advisor, getHelpArgs(config.advisor), {
-    pipeOutput: true,
-  });
-  if (help.exitCode !== 0) {
-    log.error(help.stderr || `${config.advisor} help check failed.`);
-    outro("Doctor failed.");
-    return;
-  }
-
-  log.success(`${config.advisor} help check OK.`);
   outro("Doctor passed.");
 }
 
@@ -197,9 +323,16 @@ export async function runPrompt(prompt: string) {
 }
 
 async function promptForConfig() {
+  const installedAdvisors = getInstalledAdvisorChoices();
+  if (installedAdvisors.length === 0) {
+    log.error("No supported coding CLI found on PATH.");
+    log.info(`Supported CLIs: ${advisorChoices.join(", ")}`);
+    process.exit(1);
+  }
+
   const advisor = await select({
     message: "Choose a coding CLI",
-    options: advisorChoices.map((value) => ({ value, label: value })),
+    options: installedAdvisors.map((value) => ({ value, label: value })),
   });
   if (isCancel(advisor)) return endCancelled();
   return promptForAdvisor(advisor);

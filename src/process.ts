@@ -1,7 +1,6 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
-import type { Advisor } from "./advisors.js";
 
 export function resolveExecutable(command: string) {
   const pathValue = process.env.PATH || "";
@@ -11,9 +10,8 @@ export function resolveExecutable(command: string) {
     .find((candidate) => existsSync(candidate));
 }
 
-export function getHelpArgs(advisor: Advisor) {
-  if (advisor === "amp") return ["--version"];
-  return ["--help"];
+export function getVersionArgs() {
+  return ["--version"];
 }
 
 export function runCommand(
