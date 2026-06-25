@@ -24,6 +24,7 @@ async function main() {
     .name("second-advisor")
     .description("Consult a configured coding CLI for a second opinion.")
     .argument("[input...]", "prompt to send to the configured advisor")
+    .option("--debug", "print the coding CLI command before running it")
     .allowUnknownOption(false)
     .helpOption("-h, --help", "display help")
     .addHelpText(
@@ -40,6 +41,7 @@ Examples:
 
   program.parse(process.argv);
   const request = parseCliRequest(program.args);
+  const options = program.opts<{ debug?: boolean }>();
 
   if (request.kind === "menu") {
     await runMenu();
@@ -47,7 +49,7 @@ Examples:
   }
 
   if (request.kind === "prompt") {
-    await runPrompt(request.prompt);
+    await runPrompt(request.prompt, { debug: options.debug === true });
     return;
   }
 

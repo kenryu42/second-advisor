@@ -2,12 +2,32 @@ import { expect, test } from "bun:test";
 import { chmod, mkdir, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import type { Config } from "../src/advisors.js";
 import {
   formatAdvisorDoctorTable,
   getInstalledAdvisorChoices,
   normalizeVersionOutput,
   runWithLoader,
 } from "../src/ui.js";
+
+async function createCliFixture(
+  config: Config,
+  executable: string,
+  script: string,
+) {
+  const home = await mkdtemp(path.join(tmpdir(), "second-advisor-home-"));
+  const bin = await mkdtemp(path.join(tmpdir(), "second-advisor-bin-"));
+  await mkdir(path.join(home, ".config", "second-advisor"), {
+    recursive: true,
+  });
+  await Bun.write(
+    path.join(home, ".config", "second-advisor", "config.json"),
+    `${JSON.stringify(config)}\n`,
+  );
+  await Bun.write(path.join(bin, executable), script);
+  await chmod(path.join(bin, executable), 0o755);
+  return { home, bin };
+}
 
 test("filters coding CLI choices to installed advisors", () => {
   expect(
@@ -80,24 +100,18 @@ test("runs doctor work with a loader indicator", async () => {
 });
 
 test("doctor output omits redundant configured CLI success lines", async () => {
-  const home = await mkdtemp(path.join(tmpdir(), "second-advisor-home-"));
-  const bin = await mkdtemp(path.join(tmpdir(), "second-advisor-bin-"));
-  await mkdir(path.join(home, ".config", "second-advisor"), {
-    recursive: true,
-  });
-  await Bun.write(
-    path.join(home, ".config", "second-advisor", "config.json"),
-    `${JSON.stringify({ advisor: "amp", model: "deep", thinking: "max" })}\n`,
+  const fixture = await createCliFixture(
+    { advisor: "amp", model: "deep", thinking: "max" },
+    "amp",
+    "#!/bin/sh\necho amp 1.0.0\n",
   );
-  await Bun.write(path.join(bin, "amp"), "#!/bin/sh\necho amp 1.0.0\n");
-  await chmod(path.join(bin, "amp"), 0o755);
 
   const child = Bun.spawn([process.execPath, "run", "src/index.ts", "doctor"], {
     cwd: process.cwd(),
     env: {
       ...process.env,
-      HOME: home,
-      PATH: bin,
+      HOME: fixture.home,
+      PATH: fixture.bin,
     },
     stderr: "pipe",
     stdout: "pipe",
@@ -108,4 +122,31 @@ test("doctor output omits redundant configured CLI success lines", async () => {
   expect(output).toContain("Doctor passed.");
   expect(output).not.toContain("Executable found:");
   expect(output).not.toContain("version check OK.");
+});
+
+test("debug prompt output includes the advisor command", async () => {
+  const fixture = await createCliFixture(
+    { advisor: "amp", model: "rush", thinking: "low" },
+    "amp",
+    "#!/bin/sh\necho advisor ran\n",
+  );
+
+  const child = Bun.spawn(
+    [process.execPath, "run", "src/index.ts", "say hi", "--debug"],
+    {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        HOME: fixture.home,
+        PATH: fixture.bin,
+      },
+      stderr: "pipe",
+      stdout: "pipe",
+    },
+  );
+  const output = `${await new Response(child.stdout).text()}\n${await new Response(child.stderr).text()}`;
+
+  expect(await child.exited).toBe(0);
+  expect(output).toContain("amp --mode rush --effort low --execute 'say hi'");
+  expect(output).toContain("advisor ran");
 });

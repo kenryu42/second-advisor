@@ -305,7 +305,7 @@ export async function runDoctor() {
   outro("Doctor passed.");
 }
 
-export async function runPrompt(prompt: string) {
+export async function runPrompt(prompt: string, options = { debug: false }) {
   const config = await readConfigIfPresent();
   if (!config) {
     console.error(
@@ -316,10 +316,22 @@ export async function runPrompt(prompt: string) {
   }
 
   const advisorCommand = buildAdvisorCommand(config, prompt);
+  if (options.debug) {
+    console.error(formatCommand(advisorCommand.command, advisorCommand.args));
+  }
   const result = await runCommand(advisorCommand.command, advisorCommand.args, {
     pipeOutput: false,
   });
   process.exitCode = result.exitCode;
+}
+
+function formatCommand(command: string, args: string[]) {
+  return [command, ...args].map(formatCommandPart).join(" ");
+}
+
+function formatCommandPart(value: string) {
+  if (/^[A-Za-z0-9_/:=.,@%+-]+$/.test(value)) return value;
+  return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
 async function promptForConfig() {
