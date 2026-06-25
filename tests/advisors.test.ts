@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import {
   advisorChoices,
+  ampModes,
   ampThinking,
   ampThinkingByMode,
   buildAdvisorCommand,
@@ -122,6 +123,7 @@ test("declares Claude model aliases", () => {
 });
 
 test("declares Amp effort choices", () => {
+  expect(ampModes).toEqual(["rush", "smart", "deep"]);
   expect(ampThinking).toEqual([
     "none",
     "minimal",

@@ -9,7 +9,7 @@ export const advisorChoices = [
   "kimi",
 ] as const;
 
-export const ampModes = ["deep", "rush", "smart"] as const;
+export const ampModes = ["rush", "smart", "deep"] as const;
 export const ampThinking = [
   "none",
   "minimal",
