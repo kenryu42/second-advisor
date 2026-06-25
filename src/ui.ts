@@ -1,3 +1,6 @@
+import { existsSync } from "node:fs";
+import { readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
 import {
   cancel,
   intro,
@@ -40,6 +43,24 @@ type Loader = {
   start: (message: string) => void;
   stop: (message: string) => void;
 };
+
+export const secondAdvisorReviewBlock = `## Second Advisor Review
+
+After completing substantial work, especially code changes, skill changes, CLI behavior changes, or agent workflow changes, ask for a second opinion before the final response.
+
+Use:
+
+second-advisor "<review prompt>"
+
+The second opinion must be read and considered. Fix valid high-priority issues, then rerun relevant tests. If the second-advisor command hangs or fails, report that clearly instead of blocking forever.
+
+Do not run second-advisor for:
+- simple Q&A
+- tiny documentation wording changes
+- status updates
+- tasks where the user explicitly says not to`;
+
+const agentInstructionFiles = ["AGENTS.md", "CLAUDE.md"] as const;
 
 export async function runWithLoader<T>(
   loader: Loader,
@@ -260,6 +281,45 @@ export async function runModels(input?: string) {
   log.message(choices.map((choice) => `- ${choice}`).join("\n"));
 }
 
+export async function runSetup(cwd = process.cwd()) {
+  const result = await setupSecondAdvisorReview(cwd);
+  if (result.updated.length === 0 && result.skipped.length === 0) {
+    console.error("No AGENTS.md or CLAUDE.md found in the current directory.");
+    process.exitCode = 1;
+    return;
+  }
+
+  result.skipped.forEach((file) => {
+    log.info(`Already configured: ${file}`);
+  });
+  result.updated.forEach((file) => {
+    log.success(`Updated: ${file}`);
+  });
+}
+
+export async function setupSecondAdvisorReview(cwd = process.cwd()) {
+  const files = agentInstructionFiles
+    .map((file) => path.join(cwd, file))
+    .filter((file) => existsSync(file));
+
+  const changes = await Promise.all(
+    files.map(async (file) =>
+      (await setupSecondAdvisorReviewFile(file))
+        ? { updated: path.basename(file), skipped: undefined }
+        : { updated: undefined, skipped: path.basename(file) },
+    ),
+  );
+
+  return {
+    updated: changes
+      .map((change) => change.updated)
+      .filter((file) => file !== undefined),
+    skipped: changes
+      .map((change) => change.skipped)
+      .filter((file) => file !== undefined),
+  };
+}
+
 export async function runDoctor() {
   intro("second-advisor doctor");
   const advisorChecks = await runWithLoader(
@@ -332,6 +392,25 @@ function formatCommand(command: string, args: string[]) {
 function formatCommandPart(value: string) {
   if (/^[A-Za-z0-9_/:=.,@%+-]+$/.test(value)) return value;
   return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+async function setupSecondAdvisorReviewFile(file: string) {
+  const content = await readFile(file, "utf8");
+  if (content.includes("## Second Advisor Review")) return false;
+  await writeFile(file, appendReviewBlock(content));
+  return true;
+}
+
+function appendReviewBlock(content: string) {
+  const separator =
+    content.length === 0
+      ? ""
+      : content.endsWith("\n\n")
+        ? ""
+        : content.endsWith("\n")
+          ? "\n"
+          : "\n\n";
+  return `${content}${separator}${secondAdvisorReviewBlock}\n`;
 }
 
 async function promptForConfig() {

@@ -21,8 +21,8 @@
     "hooks:install": "lefthook install",
     "knip": "knip",
     "cpd": "cpd src tests --reporters ai --exit-code 1 --no-tips",
-    "check": "bun run typecheck && bun run lint && bun run knip && bun run cpd && bun test",
-    "check:ci": "bun run typecheck && bun run lint:ci && bun run knip && bun run cpd && bun test --coverage --coverage-reporter=lcov",
+    "check": "bun run typecheck && bun run lint && bun run knip && bun run cpd && AGENT=1 bun test",
+    "check:ci": "bun run typecheck && bun run lint:ci && bun run knip && bun run cpd && AGENT=1 bun test --coverage --coverage-reporter=lcov",
     "publish:dry-run": "bun scripts/publish.ts --dry-run",
     "changelog": "bun scripts/changelog.ts"
   },

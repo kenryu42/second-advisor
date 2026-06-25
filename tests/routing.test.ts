@@ -18,6 +18,11 @@ test("routes bare invocation, commands, and prompts", () => {
     command: "models",
     args: ["amp"],
   });
+  expect(parseCliRequest(["setup"])).toEqual({
+    kind: "command",
+    command: "setup",
+    args: [],
+  });
   expect(parseCliRequest(["what", "do", "you", "think?"])).toEqual({
     kind: "prompt",
     prompt: "what do you think?",

@@ -7,6 +7,7 @@ import {
   runMenu,
   runModels,
   runPrompt,
+  runSetup,
   runStatus,
 } from "./ui.js";
 
@@ -35,6 +36,7 @@ Examples:
   second-advisor init
   second-advisor doctor
   second-advisor models
+  second-advisor setup
   second-advisor "what do you think about this implementation?"
 `,
     );
@@ -65,6 +67,11 @@ Examples:
 
   if (request.command === "models") {
     await runModels(request.args[0]);
+    return;
+  }
+
+  if (request.command === "setup") {
+    await runSetup();
     return;
   }
 

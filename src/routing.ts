@@ -1,4 +1,4 @@
-const commands = ["init", "doctor", "models", "status"] as const;
+const commands = ["init", "doctor", "models", "setup", "status"] as const;
 
 type CommandName = (typeof commands)[number];
 

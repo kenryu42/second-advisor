@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { chmod, mkdir, mkdtemp } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { Config } from "../src/advisors.js";
@@ -8,6 +8,8 @@ import {
   getInstalledAdvisorChoices,
   normalizeVersionOutput,
   runWithLoader,
+  secondAdvisorReviewBlock,
+  setupSecondAdvisorReview,
 } from "../src/ui.js";
 
 async function createCliFixture(
@@ -27,6 +29,30 @@ async function createCliFixture(
   await Bun.write(path.join(bin, executable), script);
   await chmod(path.join(bin, executable), 0o755);
   return { home, bin };
+}
+
+async function runCli(
+  args: string[],
+  options: { cwd?: string; env?: Record<string, string | undefined> } = {},
+) {
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      "run",
+      path.join(process.cwd(), "src/index.ts"),
+      ...args,
+    ],
+    {
+      cwd: options.cwd || process.cwd(),
+      env: options.env,
+      stderr: "pipe",
+      stdout: "pipe",
+    },
+  );
+  return {
+    exitCode: await child.exited,
+    output: `${await new Response(child.stdout).text()}\n${await new Response(child.stderr).text()}`,
+  };
 }
 
 test("filters coding CLI choices to installed advisors", () => {
@@ -106,22 +132,18 @@ test("doctor output omits redundant configured CLI success lines", async () => {
     "#!/bin/sh\necho amp 1.0.0\n",
   );
 
-  const child = Bun.spawn([process.execPath, "run", "src/index.ts", "doctor"], {
-    cwd: process.cwd(),
+  const result = await runCli(["doctor"], {
     env: {
       ...process.env,
       HOME: fixture.home,
       PATH: fixture.bin,
     },
-    stderr: "pipe",
-    stdout: "pipe",
   });
-  const output = `${await new Response(child.stdout).text()}\n${await new Response(child.stderr).text()}`;
 
-  expect(await child.exited).toBe(0);
-  expect(output).toContain("Doctor passed.");
-  expect(output).not.toContain("Executable found:");
-  expect(output).not.toContain("version check OK.");
+  expect(result.exitCode).toBe(0);
+  expect(result.output).toContain("Doctor passed.");
+  expect(result.output).not.toContain("Executable found:");
+  expect(result.output).not.toContain("version check OK.");
 });
 
 test("debug prompt output includes the advisor command", async () => {
@@ -131,22 +153,91 @@ test("debug prompt output includes the advisor command", async () => {
     "#!/bin/sh\necho advisor ran\n",
   );
 
-  const child = Bun.spawn(
-    [process.execPath, "run", "src/index.ts", "say hi", "--debug"],
-    {
-      cwd: process.cwd(),
-      env: {
-        ...process.env,
-        HOME: fixture.home,
-        PATH: fixture.bin,
-      },
-      stderr: "pipe",
-      stdout: "pipe",
+  const result = await runCli(["say hi", "--debug"], {
+    env: {
+      ...process.env,
+      HOME: fixture.home,
+      PATH: fixture.bin,
     },
-  );
-  const output = `${await new Response(child.stdout).text()}\n${await new Response(child.stderr).text()}`;
+  });
 
-  expect(await child.exited).toBe(0);
-  expect(output).toContain("amp --mode rush --effort low --execute 'say hi'");
-  expect(output).toContain("advisor ran");
+  expect(result.exitCode).toBe(0);
+  expect(result.output).toContain(
+    "amp --mode rush --effort low --execute 'say hi'",
+  );
+  expect(result.output).toContain("advisor ran");
+});
+
+test("setup appends second advisor review instructions to AGENTS.md", async () => {
+  const cwd = await mkdtemp(path.join(tmpdir(), "second-advisor-setup-"));
+  await Bun.write(path.join(cwd, "AGENTS.md"), "# Instructions\n");
+
+  const result = await setupSecondAdvisorReview(cwd);
+
+  expect(result).toEqual({ updated: ["AGENTS.md"], skipped: [] });
+  expect(await readFile(path.join(cwd, "AGENTS.md"), "utf8")).toBe(
+    `# Instructions\n\n${secondAdvisorReviewBlock}\n`,
+  );
+});
+
+test("setup appends second advisor review instructions to CLAUDE.md", async () => {
+  const cwd = await mkdtemp(path.join(tmpdir(), "second-advisor-setup-"));
+  await Bun.write(path.join(cwd, "CLAUDE.md"), "# Instructions\n");
+
+  const result = await setupSecondAdvisorReview(cwd);
+
+  expect(result).toEqual({ updated: ["CLAUDE.md"], skipped: [] });
+  expect(await readFile(path.join(cwd, "CLAUDE.md"), "utf8")).toBe(
+    `# Instructions\n\n${secondAdvisorReviewBlock}\n`,
+  );
+});
+
+test("setup appends to both supported agent instruction files", async () => {
+  const cwd = await mkdtemp(path.join(tmpdir(), "second-advisor-setup-"));
+  await Bun.write(path.join(cwd, "AGENTS.md"), "# Agents\n");
+  await Bun.write(path.join(cwd, "CLAUDE.md"), "# Claude\n");
+
+  const result = await setupSecondAdvisorReview(cwd);
+
+  expect(result).toEqual({ updated: ["AGENTS.md", "CLAUDE.md"], skipped: [] });
+  expect(await readFile(path.join(cwd, "AGENTS.md"), "utf8")).toBe(
+    `# Agents\n\n${secondAdvisorReviewBlock}\n`,
+  );
+  expect(await readFile(path.join(cwd, "CLAUDE.md"), "utf8")).toBe(
+    `# Claude\n\n${secondAdvisorReviewBlock}\n`,
+  );
+});
+
+test("setup does not duplicate existing second advisor review instructions", async () => {
+  const cwd = await mkdtemp(path.join(tmpdir(), "second-advisor-setup-"));
+  await Bun.write(
+    path.join(cwd, "AGENTS.md"),
+    `# Instructions\n\n${secondAdvisorReviewBlock}\n`,
+  );
+
+  const result = await setupSecondAdvisorReview(cwd);
+
+  expect(result).toEqual({ updated: [], skipped: ["AGENTS.md"] });
+  expect(await readFile(path.join(cwd, "AGENTS.md"), "utf8")).toBe(
+    `# Instructions\n\n${secondAdvisorReviewBlock}\n`,
+  );
+});
+
+test("setup exits with an error when no supported instruction file exists", async () => {
+  const cwd = await mkdtemp(path.join(tmpdir(), "second-advisor-setup-"));
+
+  await expect(setupSecondAdvisorReview(cwd)).resolves.toEqual({
+    updated: [],
+    skipped: [],
+  });
+});
+
+test("setup command reports an error when no supported instruction file exists", async () => {
+  const cwd = await mkdtemp(path.join(tmpdir(), "second-advisor-setup-"));
+  const result = await runCli(["setup"], { cwd });
+
+  expect(result.exitCode).toBe(1);
+  expect(result.output).toContain(
+    "No AGENTS.md or CLAUDE.md found in the current directory.",
+  );
 });
