@@ -1,6 +1,7 @@
 - ALWAYS USE PARALLEL TOOLS WHEN APPLICABLE.
 - Prefer automation: execute requested actions without confirmation unless blocked by missing info or safety/irreversibility.
 - ALWAYS use `bun run check` to verify changes. This runs typecheck, cpd, knip, biome lint, and tests together. Do not run these separately.
+- Keep implementation modular; put tests in `tests/` mirroring `src/`, not colocated in `src/`.
 
 ## Style Guide
 
