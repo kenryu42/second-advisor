@@ -1,6 +1,6 @@
 {
   "name": "second-advisor",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Ask another coding CLI for a second opinion.",
   "type": "module",
   "bin": {
