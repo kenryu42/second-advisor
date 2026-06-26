@@ -6,6 +6,7 @@ import type { Config } from "../src/advisors.js";
 import {
   appTitle,
   formatAdvisorDoctorTable,
+  formatAdvisorDoctorVersions,
   formatStatus,
   getInstalledAdvisorChoices,
   normalizeVersionOutput,
@@ -59,6 +60,7 @@ async function runCli(
 
 async function runDoctorWithAmpFixture(
   extraCommands: Record<string, string> = {},
+  args = ["doctor"],
 ) {
   const fixture = await createCliFixture(
     { advisor: "amp", model: "deep", thinking: "max" },
@@ -73,7 +75,7 @@ async function runDoctorWithAmpFixture(
     }),
   );
 
-  return runCli(["doctor"], {
+  return runCli(args, {
     env: {
       ...process.env,
       HOME: fixture.home,
@@ -127,6 +129,47 @@ test("formats coding CLI versions for doctor output", () => {
 │ codex    │ yes       │ codex-cli 1.2.3      │ /usr/local/bin/codex │
 │ opencode │ yes       │ version check failed │ /opt/bin/opencode    │
 └──────────┴───────────┴──────────────────────┴──────────────────────┘`);
+});
+
+test("uses table doctor output when it fits the terminal", () => {
+  const rows = [
+    {
+      cli: "codex",
+      installed: true,
+      path: "/usr/local/bin/codex",
+      version: "codex-cli 1.2.3",
+    },
+  ];
+
+  expect(formatAdvisorDoctorVersions(rows, 120)).toBe(
+    formatAdvisorDoctorTable(rows),
+  );
+});
+
+test("uses compact doctor output when the table would wrap", () => {
+  expect(
+    formatAdvisorDoctorVersions(
+      [
+        {
+          cli: "second-advisor",
+          installed: true,
+          path: "/Users/kenryu/.nvm/versions/node/v24.16.0/bin/second-advisor",
+          version: "version check failed",
+        },
+        {
+          cli: "claude",
+          installed: false,
+          path: "-",
+          version: "not installed",
+        },
+      ],
+      60,
+    ),
+  ).toBe(`second-advisor  yes  version check failed
+  path: ~/.nvm/versions/node/v24.16.0/bin/second-advisor
+
+claude          no   not installed
+  path: -`);
 });
 
 test("normalizes version command output", () => {
@@ -217,6 +260,30 @@ test("doctor output includes installed second-advisor version", async () => {
   expect(result.exitCode).toBe(0);
   expect(result.output).toContain("second-advisor");
   expect(result.output).toContain("second-advisor 9.9.9");
+});
+
+test("doctor can output json for debugging", async () => {
+  const result = await runDoctorWithAmpFixture(
+    { "second-advisor": "#!/bin/sh\necho second-advisor 9.9.9\n" },
+    ["doctor", "--json"],
+  );
+  const output = JSON.parse(result.output.trim());
+
+  expect(result.exitCode).toBe(0);
+  expect(output.ok).toBe(true);
+  expect(output.config).toEqual({
+    path: "~/.config/second-advisor/config.json",
+    present: true,
+    summary: "advisor amp, mode deep, thinking max",
+    value: { advisor: "amp", model: "deep", thinking: "max" },
+  });
+  expect(output.errors).toEqual([]);
+  expect(output.checks).toContainEqual({
+    cli: "second-advisor",
+    installed: true,
+    path: expect.stringContaining("second-advisor"),
+    version: "second-advisor 9.9.9",
+  });
 });
 
 test("prints the package version", async () => {

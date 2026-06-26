@@ -28,6 +28,7 @@ async function main() {
     .version(readPackageVersion(), "-v, --version", "display version")
     .argument("[input...]", "prompt to send to the configured advisor")
     .option("--debug", "print the coding CLI command before running it")
+    .option("--json", "print command output as JSON when supported")
     .allowUnknownOption(false)
     .helpOption("-h, --help", "display help")
     .addHelpText(
@@ -45,7 +46,7 @@ Examples:
 
   program.parse(process.argv);
   const request = parseCliRequest(program.args);
-  const options = program.opts<{ debug?: boolean }>();
+  const options = program.opts<{ debug?: boolean; json?: boolean }>();
 
   if (request.kind === "menu") {
     await runMenu();
@@ -63,7 +64,7 @@ Examples:
   }
 
   if (request.command === "doctor") {
-    await runDoctor();
+    await runDoctor({ json: options.json === true });
     return;
   }
 

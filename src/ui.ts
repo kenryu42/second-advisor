@@ -145,6 +145,31 @@ export function formatAdvisorDoctorTable(rows: AdvisorDoctorCheck[]) {
   ].join("\n");
 }
 
+export function formatAdvisorDoctorVersions(
+  rows: AdvisorDoctorCheck[],
+  terminalWidth = process.stdout.columns || 80,
+) {
+  const table = formatAdvisorDoctorTable(rows);
+  if (getMaxLineLength(table) <= Math.max(40, terminalWidth - 4)) return table;
+  return formatAdvisorDoctorList(rows);
+}
+
+function formatAdvisorDoctorList(rows: AdvisorDoctorCheck[]) {
+  const cliWidth = Math.max("CLI".length, ...rows.map((row) => row.cli.length));
+  return rows
+    .map((row) =>
+      [
+        `${row.cli.padEnd(cliWidth)}  ${row.installed ? "yes" : "no "}  ${row.version}`,
+        `  path: ${formatDisplayPath(row.path)}`,
+      ].join("\n"),
+    )
+    .join("\n\n");
+}
+
+function getMaxLineLength(value: string) {
+  return Math.max(...value.split("\n").map((line) => line.length));
+}
+
 async function getAdvisorDoctorChecks(): Promise<AdvisorDoctorCheck[]> {
   return [
     await getDoctorCheck("second-advisor"),
@@ -345,7 +370,19 @@ export async function setupSecondAdvisorReview(cwd = process.cwd()) {
   };
 }
 
-export async function runDoctor() {
+export async function runDoctor(options = { json: false }) {
+  if (options.json) {
+    const advisorChecks = await getAdvisorDoctorChecks();
+    console.log(
+      JSON.stringify(
+        formatDoctorJson(advisorChecks, await readConfigIfPresent()),
+        null,
+        2,
+      ),
+    );
+    return;
+  }
+
   intro(`${appTitle} doctor`);
   const advisorChecks = await runWithLoader(
     spinner(),
@@ -354,7 +391,7 @@ export async function runDoctor() {
     getAdvisorDoctorChecks,
   );
   log.message(
-    `Coding CLI versions:\n${formatAdvisorDoctorTable(advisorChecks)}`,
+    `Coding CLI versions:\n${formatAdvisorDoctorVersions(advisorChecks)}`,
   );
   const config = await readConfigIfPresent();
 
@@ -388,6 +425,51 @@ export async function runDoctor() {
   }
 
   outro("Doctor passed.");
+}
+
+function formatDoctorJson(
+  checks: AdvisorDoctorCheck[],
+  config: Config | undefined,
+) {
+  const errors = getDoctorErrors(checks, config);
+  return {
+    ok: errors.length === 0,
+    config: config
+      ? {
+          path: formatDisplayPath(configPath),
+          present: true,
+          summary: summarizeConfig(config),
+          value: config,
+        }
+      : {
+          path: formatDisplayPath(configPath),
+          present: false,
+        },
+    checks,
+    errors,
+  };
+}
+
+function getDoctorErrors(
+  checks: AdvisorDoctorCheck[],
+  config: Config | undefined,
+) {
+  if (!config) return [`Config missing: ${formatDisplayPath(configPath)}`];
+
+  const advisorCheck = checks.find((check) => check.cli === config.advisor);
+  if (!advisorCheck?.installed) {
+    return [`Executable not found on PATH: ${config.advisor}`];
+  }
+
+  if (advisorCheck.version === "version check failed") {
+    return [`${config.advisor} version check failed.`];
+  }
+
+  if (config.advisor === "amp" && !ampModes.includes(config.model)) {
+    return [`Invalid Amp mode: ${config.model}`];
+  }
+
+  return [];
 }
 
 export async function runPrompt(prompt: string, options = { debug: false }) {

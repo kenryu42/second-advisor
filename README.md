@@ -191,8 +191,16 @@ second-advisor -v
 
 Checks the installed `second-advisor` version, installed advisor CLI versions, config validity, configured advisor executable, and Amp mode validity.
 
+The version report uses a table when it fits the terminal and switches to a compact list on narrow terminals.
+
 ```sh
 second-advisor doctor
+```
+
+For machine-readable debug output:
+
+```sh
+second-advisor doctor --json
 ```
 
 ### `second-advisor models [advisor]`
