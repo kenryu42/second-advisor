@@ -60,9 +60,11 @@ Use:
 
 second-advisor "<review prompt>"
 
-The second opinion must be read and considered. Wait for the second-advisor command to finish as long as it is still running without crashing or outputting an error, even if it produces no output for a long time. Fix valid high-priority issues, then rerun relevant tests. If the second-advisor command crashes or outputs an error, report that clearly.
+The second opinion must be read and considered. Wait for the second-advisor command to finish as long as it is still running without crashing or outputting an error, even if it produces no output for a long time. Run at most one second-advisor review per task. If it finds valid high-priority issues, fix them and rerun relevant tests, but do not run second-advisor again unless the user explicitly asks or the fix substantially changes the design beyond the reviewed scope. If the second-advisor command crashes or outputs an error, report that clearly.
 
 Do not run second-advisor for:
+- tasks invoked by second-advisor or when you are already responding as the second-advisor reviewer
+- Do not run second-advisor if SECOND_ADVISOR=1 is present.
 - simple Q&A
 - tiny documentation wording changes
 - status updates
@@ -91,6 +93,15 @@ type SetupResult = {
   updated: SetupUpdate[];
   skipped: string[];
   errors: SetupError[];
+};
+
+type SetupFileResult =
+  | { kind: "updated"; oldContent: string; content: string }
+  | { kind: "skipped" }
+  | { kind: "error"; message: string };
+
+type SetupOptions = {
+  remove?: boolean;
 };
 
 const agentInstructionFiles = ["AGENTS.md", "CLAUDE.md"] as const;
@@ -360,8 +371,11 @@ export async function runModels(input?: string) {
   log.message(choices.map((choice) => `- ${choice}`).join("\n"));
 }
 
-export async function runSetup(cwd = process.cwd()) {
-  const result = await setupSecondAdvisorReview(cwd);
+export async function runSetup(
+  cwd = process.cwd(),
+  options: SetupOptions = {},
+) {
+  const result = await setupSecondAdvisorReview(cwd, options);
   if (
     result.updated.length === 0 &&
     result.skipped.length === 0 &&
@@ -373,7 +387,11 @@ export async function runSetup(cwd = process.cwd()) {
   }
 
   result.skipped.forEach((file) => {
-    log.info(`Already configured: ${file}`);
+    log.info(
+      options.remove
+        ? `Nothing to remove: ${file}`
+        : `Already configured: ${file}`,
+    );
   });
   result.updated.forEach((update) => {
     log.success(`Updated: ${update.file}`);
@@ -419,6 +437,7 @@ async function getCliVersion(cli: string) {
 
 export async function setupSecondAdvisorReview(
   cwd = process.cwd(),
+  options: SetupOptions = {},
 ): Promise<SetupResult> {
   const files = agentInstructionFiles
     .map((file) => path.join(cwd, file))
@@ -427,7 +446,7 @@ export async function setupSecondAdvisorReview(
   const changes = await Promise.all(
     files.map(async (file) => ({
       file: path.basename(file),
-      result: await setupSecondAdvisorReviewFile(file),
+      result: await setupSecondAdvisorReviewFile(file, options),
     })),
   );
 
@@ -575,6 +594,7 @@ export async function runPrompt(prompt: string, options = { debug: false }) {
     console.error(formatCommand(advisorCommand.command, advisorCommand.args));
   }
   const result = await runCommand(advisorCommand.command, advisorCommand.args, {
+    env: { ...process.env, SECOND_ADVISOR: "1" },
     pipeOutput: false,
   });
   process.exitCode = result.exitCode;
@@ -589,9 +609,14 @@ function formatCommandPart(value: string) {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
-async function setupSecondAdvisorReviewFile(file: string) {
+async function setupSecondAdvisorReviewFile(
+  file: string,
+  options: SetupOptions,
+) {
   const content = await readFile(file, "utf8");
-  const result = applySecondAdvisorReviewBlock(content);
+  const result = options.remove
+    ? removeSecondAdvisorReviewBlock(content)
+    : applySecondAdvisorReviewBlock(content);
   if (result.kind !== "updated") return result;
   await writeFile(file, result.content);
   return result;
@@ -609,26 +634,64 @@ function appendReviewBlock(content: string) {
   return `${content}${separator}${secondAdvisorReviewBlock}\n`;
 }
 
-function applySecondAdvisorReviewBlock(
+function applySecondAdvisorReviewBlock(content: string): SetupFileResult {
+  return updateSecondAdvisorReviewBlock(
+    content,
+    replaceSecondAdvisorBlock,
+    () => ({
+      kind: "updated",
+      oldContent: content,
+      content: appendReviewBlock(content),
+    }),
+  );
+}
+
+function removeSecondAdvisorReviewBlock(content: string): SetupFileResult {
+  const ranges = findRemovableSecondAdvisorBlocks(content);
+  if (ranges.length === 0) return { kind: "skipped" };
+  return createUpdatedContent(
+    content,
+    ranges
+      .sort((left, right) => right.start - left.start)
+      .reduce(
+        (updated, range) => removeSecondAdvisorRangeContent(updated, range),
+        content,
+      ),
+  );
+}
+
+function updateSecondAdvisorReviewBlock(
   content: string,
-):
-  | { kind: "updated"; oldContent: string; content: string }
-  | { kind: "skipped" }
-  | { kind: "error"; message: string } {
-  const managedBlock = findManagedBlock(content);
-  if (managedBlock === "malformed") {
-    return {
-      kind: "error",
-      message: "Malformed second-advisor managed block markers.",
-    };
-  }
-  if (managedBlock) return replaceSecondAdvisorBlock(content, managedBlock);
-  const legacyBlock = findLegacySecondAdvisorBlock(content);
-  if (legacyBlock) return replaceSecondAdvisorBlock(content, legacyBlock);
+  update: (content: string, range: TextRange) => SetupFileResult,
+  missing: () => SetupFileResult,
+): SetupFileResult {
+  const block = findSecondAdvisorBlock(content);
+  if (block === "malformed") return malformedSecondAdvisorMarkers();
+  if (block) return update(content, block);
+  return missing();
+}
+
+function createUpdatedContent(
+  oldContent: string,
+  content: string,
+): SetupFileResult {
   return {
     kind: "updated",
-    oldContent: content,
-    content: appendReviewBlock(content),
+    oldContent,
+    content,
+  };
+}
+
+function findSecondAdvisorBlock(content: string) {
+  const managedBlock = findManagedBlock(content);
+  if (managedBlock) return managedBlock;
+  return findLegacySecondAdvisorBlock(content);
+}
+
+function malformedSecondAdvisorMarkers() {
+  return {
+    kind: "error" as const,
+    message: "Malformed second-advisor managed block markers.",
   };
 }
 
@@ -637,11 +700,23 @@ function replaceSecondAdvisorBlock(content: string, range: TextRange) {
     return { kind: "skipped" as const };
   }
 
-  return {
-    kind: "updated" as const,
-    oldContent: content,
-    content: `${content.slice(0, range.start)}${secondAdvisorReviewBlock}${getReplacementSeparator(content.slice(range.end))}${content.slice(range.end)}`,
-  };
+  return createUpdatedContent(
+    content,
+    `${content.slice(0, range.start)}${secondAdvisorReviewBlock}${getReplacementSeparator(content.slice(range.end))}${content.slice(range.end)}`,
+  );
+}
+
+function removeSecondAdvisorRangeContent(content: string, range: TextRange) {
+  const before = content.slice(0, range.start).replace(/\n+$/, "");
+  const after = content.slice(range.end).replace(/^\n+/, "");
+  const result =
+    before.length > 0 && after.length > 0
+      ? `${before}\n\n${after}`
+      : `${before}${after}`;
+  if (result.length > 0 && content.endsWith("\n") && !result.endsWith("\n")) {
+    return `${result}\n`;
+  }
+  return result;
 }
 
 function getReplacementSeparator(after: string) {
@@ -668,17 +743,102 @@ function findManagedBlock(content: string) {
 }
 
 function findLegacySecondAdvisorBlock(content: string) {
-  const match = /^## Second Advisor Review$/m.exec(content);
-  if (!match) return undefined;
-  const afterHeading = match.index + match[0].length;
-  const nextHeading = content.slice(afterHeading).search(/\n## /);
-  return {
+  return findLegacySecondAdvisorBlocks(content)[0];
+}
+
+function findRemovableSecondAdvisorBlocks(content: string) {
+  const managedBlocks = findCompleteManagedBlocks(content);
+  const legacyBlocks = findLegacySecondAdvisorBlocks(content)
+    .filter((range) => !startsInsideAnyRange(range, managedBlocks))
+    .map((range) => expandRangeToPrecedingStartMarker(content, range));
+  const markerBlocks = [
+    ...findMarkerRanges(content, secondAdvisorStartMarker),
+    ...findMarkerRanges(content, secondAdvisorEndMarker),
+  ].filter(
+    (range) => !isInsideAnyRange(range, [...managedBlocks, ...legacyBlocks]),
+  );
+  return mergeRanges([...managedBlocks, ...legacyBlocks, ...markerBlocks]);
+}
+
+function findCompleteManagedBlocks(content: string) {
+  return [...content.matchAll(managedBlockPattern())].map((match) => ({
     start: match.index,
-    end:
-      nextHeading === -1
-        ? content.length
-        : afterHeading + nextHeading + "\n".length,
-  };
+    end: match.index + match[0].length,
+  }));
+}
+
+function findLegacySecondAdvisorBlocks(content: string) {
+  return [...content.matchAll(/^## Second Advisor Review$/gm)].map((match) => {
+    const afterHeading = match.index + match[0].length;
+    const nextHeading = content.slice(afterHeading).search(/\n## /);
+    return {
+      start: match.index,
+      end:
+        nextHeading === -1
+          ? content.length
+          : afterHeading + nextHeading + "\n".length,
+    };
+  });
+}
+
+function expandRangeToPrecedingStartMarker(content: string, range: TextRange) {
+  const start = content.lastIndexOf(secondAdvisorStartMarker, range.start);
+  if (
+    start === -1 ||
+    content.slice(start + secondAdvisorStartMarker.length, range.start).trim()
+      .length > 0
+  ) {
+    return range;
+  }
+  return { start, end: range.end };
+}
+
+function findMarkerRanges(content: string, marker: string) {
+  return [...content.matchAll(new RegExp(escapeRegExp(marker), "g"))].map(
+    (match) => ({
+      start: match.index,
+      end: match.index + marker.length,
+    }),
+  );
+}
+
+function isInsideAnyRange(range: TextRange, ranges: TextRange[]) {
+  return ranges.some(
+    (candidate) => range.start >= candidate.start && range.end <= candidate.end,
+  );
+}
+
+function startsInsideAnyRange(range: TextRange, ranges: TextRange[]) {
+  return ranges.some(
+    (candidate) =>
+      range.start >= candidate.start && range.start < candidate.end,
+  );
+}
+
+function mergeRanges(ranges: TextRange[]) {
+  const merged: TextRange[] = [];
+  ranges
+    .sort((left, right) => left.start - right.start)
+    .forEach((range) => {
+      const last = merged.at(-1);
+      if (!last || range.start > last.end) {
+        merged.push(range);
+        return;
+      }
+      last.end = Math.max(last.end, range.end);
+    });
+  return merged;
+}
+
+function managedBlockPattern() {
+  return new RegExp(
+    `${escapeRegExp(secondAdvisorStartMarker)}[\\s\\S]*?${escapeRegExp(secondAdvisorEndMarker)}`,
+    "g",
+  );
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 export function formatSetupDiff(

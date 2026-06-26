@@ -83,9 +83,11 @@ Use:
 
 second-advisor "<review prompt>"
 
-The second opinion must be read and considered. Wait for the second-advisor command to finish as long as it is still running without crashing or outputting an error, even if it produces no output for a long time. Fix valid high-priority issues, then rerun relevant tests. If the second-advisor command crashes or outputs an error, report that clearly.
+The second opinion must be read and considered. Wait for the second-advisor command to finish as long as it is still running without crashing or outputting an error, even if it produces no output for a long time. Run at most one second-advisor review per task. If it finds valid high-priority issues, fix them and rerun relevant tests, but do not run second-advisor again unless the user explicitly asks or the fix substantially changes the design beyond the reviewed scope. If the second-advisor command crashes or outputs an error, report that clearly.
 
 Do not run second-advisor for:
+- tasks invoked by second-advisor or when you are already responding as the second-advisor reviewer
+- Do not run second-advisor if SECOND_ADVISOR=1 is present.
 - simple Q&A
 - tiny documentation wording changes
 - status updates

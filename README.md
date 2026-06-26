@@ -223,6 +223,7 @@ Looks for `AGENTS.md` and `CLAUDE.md` in the current working directory and insta
 
 ```sh
 second-advisor setup
+second-advisor setup --remove
 ```
 
 Behavior:
@@ -230,9 +231,10 @@ Behavior:
 - Updates both files if both exist.
 - Appends the managed block when it is missing.
 - Updates stale managed or legacy `## Second Advisor Review` blocks in place.
+- Removes managed or legacy `## Second Advisor Review` blocks when `--remove` is passed.
 - Skips a file when the managed block already matches the latest text.
 - Prints a focused unified diff for each file it edits.
-- Leaves files with malformed Second Advisor markers unchanged and reports an error.
+- Leaves files with malformed Second Advisor markers unchanged and reports an error when installing/updating; `--remove` cleans them up best-effort.
 - Exits with code `1` if neither `AGENTS.md` nor `CLAUDE.md` exists in the current directory.
 - Exits with code `1` if any file cannot be updated safely.
 - Does not search parent directories.

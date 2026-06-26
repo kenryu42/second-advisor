@@ -89,6 +89,17 @@ async function expectMalformedSetupPreservesContent(content: string) {
   await expectFileContent(cwd, "AGENTS.md", content);
 }
 
+async function runSetupCli(cwd: string, args: string[] = []) {
+  const result = await runCli(["setup", ...args], {
+    cwd,
+    env: { ...process.env, NO_COLOR: "1" },
+  });
+
+  expect(result.exitCode).toBe(0);
+  expect(result.output).toContain("Updated: AGENTS.md");
+  return result;
+}
+
 async function runDoctorWithAmpFixture(
   extraCommands: Record<string, string> = {},
   args = ["doctor"],
@@ -373,10 +384,35 @@ test("debug prompt output includes the advisor command", async () => {
   expect(result.output).toContain("advisor ran");
 });
 
+test("prompt execution marks advisor subprocesses", async () => {
+  const fixture = await createCliFixture(
+    { advisor: "amp", model: "rush", thinking: "low" },
+    "amp",
+    "#!/bin/sh\necho SECOND_ADVISOR=$SECOND_ADVISOR\n",
+  );
+
+  const result = await runCli(["say hi"], {
+    env: {
+      ...process.env,
+      HOME: fixture.home,
+      PATH: fixture.bin,
+    },
+  });
+
+  expect(result.exitCode).toBe(0);
+  expect(result.output).toContain("SECOND_ADVISOR=1");
+});
+
 test("second advisor review instructions wait for long-running reviews", () => {
   expect(secondAdvisorReviewBlock).toContain("<!-- second-advisor:start -->");
   expect(secondAdvisorReviewBlock).toContain(
     "Wait for the second-advisor command to finish as long as it is still running without crashing or outputting an error, even if it produces no output for a long time.",
+  );
+  expect(secondAdvisorReviewBlock).toContain(
+    "Run at most one second-advisor review per task.",
+  );
+  expect(secondAdvisorReviewBlock).toContain(
+    "Do not run second-advisor if SECOND_ADVISOR=1 is present.",
   );
   expect(secondAdvisorReviewBlock).toContain("<!-- second-advisor:end -->");
   expect(secondAdvisorReviewBlock).not.toContain("blocking forever");
@@ -389,7 +425,7 @@ test("setup appends second advisor review instructions to AGENTS.md", async () =
   const result = await setupSecondAdvisorReview(cwd);
 
   expectSetupUpdated(result, ["AGENTS.md"]);
-  expect(result.updated[0]?.diff).toContain("@@ -1,1 +1,19 @@");
+  expect(result.updated[0]?.diff).toContain("@@ -1,1 +1,");
   expect(result.updated[0]?.diff).toContain("+<!-- second-advisor:start -->");
   await expectFileContent(
     cwd,
@@ -446,6 +482,122 @@ test("setup does not duplicate existing second advisor review instructions", asy
     cwd,
     "AGENTS.md",
     `# Instructions\n\n${secondAdvisorReviewBlock}\n`,
+  );
+});
+
+test("setup remove deletes managed second advisor review instructions", async () => {
+  const cwd = await mkdtemp(path.join(tmpdir(), "second-advisor-setup-"));
+  await Bun.write(
+    path.join(cwd, "AGENTS.md"),
+    `# Instructions\n\n${secondAdvisorReviewBlock}\n\n## Other\nKeep this.\n`,
+  );
+
+  const result = await setupSecondAdvisorReview(cwd, { remove: true });
+
+  expectSetupUpdated(result, ["AGENTS.md"]);
+  expect(result.updated[0]?.diff).toContain("-<!-- second-advisor:start -->");
+  await expectFileContent(
+    cwd,
+    "AGENTS.md",
+    "# Instructions\n\n## Other\nKeep this.\n",
+  );
+});
+
+test("setup remove deletes legacy second advisor review instructions", async () => {
+  const cwd = await mkdtemp(path.join(tmpdir(), "second-advisor-setup-"));
+  await Bun.write(
+    path.join(cwd, "AGENTS.md"),
+    `# Instructions\n\n## Second Advisor Review\n\nold instructions\n\n## Other\nKeep this.\n`,
+  );
+
+  const result = await setupSecondAdvisorReview(cwd, { remove: true });
+
+  expectSetupUpdated(result, ["AGENTS.md"]);
+  await expectFileContent(
+    cwd,
+    "AGENTS.md",
+    "# Instructions\n\n## Other\nKeep this.\n",
+  );
+});
+
+test("setup remove skips files without second advisor review instructions", async () => {
+  const cwd = await mkdtemp(path.join(tmpdir(), "second-advisor-setup-"));
+  await Bun.write(path.join(cwd, "AGENTS.md"), "# Instructions\n");
+
+  const result = await setupSecondAdvisorReview(cwd, { remove: true });
+
+  expect(result).toEqual({ updated: [], skipped: ["AGENTS.md"], errors: [] });
+  await expectFileContent(cwd, "AGENTS.md", "# Instructions\n");
+});
+
+test("setup remove deletes duplicate managed second advisor review instructions", async () => {
+  const cwd = await mkdtemp(path.join(tmpdir(), "second-advisor-setup-"));
+  await Bun.write(
+    path.join(cwd, "AGENTS.md"),
+    `# Instructions\n\n${secondAdvisorReviewBlock}\n\n${secondAdvisorReviewBlock}\n\n## Other\nKeep this.\n`,
+  );
+
+  const result = await setupSecondAdvisorReview(cwd, { remove: true });
+
+  expectSetupUpdated(result, ["AGENTS.md"]);
+  await expectFileContent(
+    cwd,
+    "AGENTS.md",
+    "# Instructions\n\n## Other\nKeep this.\n",
+  );
+});
+
+test("setup remove deletes malformed second advisor review instructions", async () => {
+  const cwd = await mkdtemp(path.join(tmpdir(), "second-advisor-setup-"));
+  await Bun.write(
+    path.join(cwd, "AGENTS.md"),
+    `# Instructions\n\n<!-- second-advisor:start -->\n## Second Advisor Review\n\nold instructions\n\n## Other\nKeep this.\n`,
+  );
+
+  const result = await setupSecondAdvisorReview(cwd, { remove: true });
+
+  expectSetupUpdated(result, ["AGENTS.md"]);
+  await expectFileContent(
+    cwd,
+    "AGENTS.md",
+    "# Instructions\n\n## Other\nKeep this.\n",
+  );
+});
+
+test("setup remove handles second advisor review instructions at file boundaries", async () => {
+  const cwd = await mkdtemp(path.join(tmpdir(), "second-advisor-setup-"));
+  await Bun.write(
+    path.join(cwd, "AGENTS.md"),
+    `${secondAdvisorReviewBlock}\n\n## Other\nKeep this.\n`,
+  );
+  await Bun.write(path.join(cwd, "CLAUDE.md"), `${secondAdvisorReviewBlock}\n`);
+
+  const result = await setupSecondAdvisorReview(cwd, { remove: true });
+
+  expectSetupUpdated(result, ["AGENTS.md", "CLAUDE.md"]);
+  await expectFileContent(cwd, "AGENTS.md", "## Other\nKeep this.\n");
+  await expectFileContent(cwd, "CLAUDE.md", "");
+});
+
+test("setup remove preserves non-h2 content after managed instructions", async () => {
+  const cwd = await mkdtemp(path.join(tmpdir(), "second-advisor-setup-"));
+  await Bun.write(
+    path.join(cwd, "AGENTS.md"),
+    `# Top\n\n${secondAdvisorReviewBlock}\n\n# Bottom\nKeep this.\n`,
+  );
+  await Bun.write(
+    path.join(cwd, "CLAUDE.md"),
+    `# Top\n\n${secondAdvisorReviewBlock}\n\nSome concluding notes.\n`,
+  );
+
+  const result = await setupSecondAdvisorReview(cwd, { remove: true });
+
+  expectSetupUpdated(result, ["AGENTS.md", "CLAUDE.md"]);
+  await expectFileContent(cwd, "AGENTS.md", "# Top\n\n# Bottom\nKeep this.\n");
+  await expectFileContent(
+    cwd,
+    "CLAUDE.md",
+    "# Top\n\nSome concluding notes.\n",
   );
 });
 
@@ -569,13 +721,8 @@ test("setup command reports a unified diff for changed files", async () => {
     "# Instructions\n\n## Second Advisor Review\n\nold instructions\n",
   );
 
-  const result = await runCli(["setup"], {
-    cwd,
-    env: { ...process.env, NO_COLOR: "1" },
-  });
+  const result = await runSetupCli(cwd);
 
-  expect(result.exitCode).toBe(0);
-  expect(result.output).toContain("Updated: AGENTS.md");
   expect(result.output).toContain("--- AGENTS.md");
   expect(result.output).toContain("+++ AGENTS.md");
   expect(result.output).toContain("-old instructions");
@@ -584,6 +731,38 @@ test("setup command reports a unified diff for changed files", async () => {
   expect(result.output).not.toContain(
     "\u001b[32m+<!-- second-advisor:start -->",
   );
+});
+
+test("setup remove command reports a unified diff for removed files", async () => {
+  const cwd = await mkdtemp(path.join(tmpdir(), "second-advisor-setup-"));
+  await Bun.write(
+    path.join(cwd, "AGENTS.md"),
+    `# Instructions\n\n${secondAdvisorReviewBlock}\n`,
+  );
+
+  const result = await runSetupCli(cwd, ["--remove"]);
+
+  expect(result.output).toContain("-<!-- second-advisor:start -->");
+  expect(result.output).not.toContain("+<!-- second-advisor:start -->");
+  await expectFileContent(cwd, "AGENTS.md", "# Instructions\n");
+});
+
+test("setup remove command reports when there is nothing to remove", async () => {
+  const cwd = await mkdtemp(path.join(tmpdir(), "second-advisor-setup-"));
+  await Bun.write(path.join(cwd, "AGENTS.md"), "# Instructions\n");
+
+  const result = await runCli(["setup", "--remove"], { cwd });
+
+  expect(result.exitCode).toBe(0);
+  expect(result.output).toContain("Nothing to remove: AGENTS.md");
+  expect(result.output).not.toContain("Already configured: AGENTS.md");
+});
+
+test("remove flag is only valid for setup", async () => {
+  const result = await runCli(["status", "--remove"]);
+
+  expect(result.exitCode).toBe(1);
+  expect(result.output).toContain("--remove can only be used with setup.");
 });
 
 test("setup command reports malformed marker errors", async () => {

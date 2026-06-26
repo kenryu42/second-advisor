@@ -17,11 +17,12 @@ export function getVersionArgs() {
 export function runCommand(
   command: string,
   args: string[],
-  options: { pipeOutput: boolean },
+  options: { pipeOutput: boolean; env?: NodeJS.ProcessEnv },
 ) {
   return new Promise<{ exitCode: number; stdout: string; stderr: string }>(
     (resolve) => {
       const child = spawn(command, args, {
+        env: options.env,
         stdio: options.pipeOutput ? ["ignore", "pipe", "pipe"] : "inherit",
       });
       const stdout: Buffer[] = [];

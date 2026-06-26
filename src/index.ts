@@ -28,6 +28,7 @@ async function main() {
     .argument("[input...]", "prompt to send to the configured advisor")
     .option("--debug", "print the coding CLI command before running it")
     .option("--json", "print command output as JSON when supported")
+    .option("--remove", "remove managed setup instructions")
     .option("-v, --version", "display compact runtime identity")
     .allowUnknownOption(false)
     .helpOption("-h, --help", "display help")
@@ -48,6 +49,7 @@ Examples:
   const options = program.opts<{
     debug?: boolean;
     json?: boolean;
+    remove?: boolean;
     version?: boolean;
   }>();
 
@@ -57,6 +59,15 @@ Examples:
   }
 
   const request = parseCliRequest(program.args);
+
+  if (
+    options.remove === true &&
+    (request.kind !== "command" || request.command !== "setup")
+  ) {
+    console.error("--remove can only be used with setup.");
+    process.exitCode = 1;
+    return;
+  }
 
   if (request.kind === "menu") {
     await runMenu();
@@ -84,7 +95,7 @@ Examples:
   }
 
   if (request.command === "setup") {
-    await runSetup();
+    await runSetup(process.cwd(), { remove: options.remove === true });
     return;
   }
 
