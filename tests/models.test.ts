@@ -78,7 +78,7 @@ test("parses only Kimi model ids", () => {
   ).toEqual(["kimi-code/kimi-k2.7-code", "kimi-code/kimi-k2.7-code-highspeed"]);
 });
 
-test("parses only Pi model names from table output", () => {
+test("parses Pi model table rows as provider-qualified model ids", () => {
   expect(
     parseModelChoices(
       "pi",
@@ -90,5 +90,5 @@ test("parses only Pi model names from table output", () => {
         "proxx                  openai/gpt-5.2                      272K     128K     yes       yes",
       ].join("\n"),
     ),
-  ).toEqual(["glm-5.2", "openai/gpt-5.2"]);
+  ).toEqual(["zai/glm-5.2", "proxx/openai/gpt-5.2"]);
 });

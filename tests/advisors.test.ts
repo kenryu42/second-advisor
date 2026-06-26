@@ -95,7 +95,7 @@ test("builds non-interactive commands for every advisor", () => {
     ),
   ).toEqual({
     command: "pi",
-    args: ["--model", "glm-5.2", "--thinking", "high", "-p", "review this"],
+    args: ["--model", "zai/glm-5.2", "--thinking", "high", "-p", "review this"],
   });
 
   expect(

@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { Command } from "commander";
+import { readPackageVersion } from "./package.js";
 import { parseCliRequest } from "./routing.js";
 import {
   runDoctor,
@@ -24,6 +25,7 @@ async function main() {
   const program = new Command()
     .name("second-advisor")
     .description("Consult a configured coding CLI for a second opinion.")
+    .version(readPackageVersion(), "-v, --version", "display version")
     .argument("[input...]", "prompt to send to the configured advisor")
     .option("--debug", "print the coding CLI command before running it")
     .allowUnknownOption(false)

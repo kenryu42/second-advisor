@@ -178,9 +178,18 @@ Shows the current config, config file path, and whether the configured advisor e
 second-advisor status
 ```
 
+### `second-advisor --version`
+
+Prints the installed CLI version.
+
+```sh
+second-advisor --version
+second-advisor -v
+```
+
 ### `second-advisor doctor`
 
-Checks installed advisor CLI versions, loads the config, confirms the configured executable exists, and verifies Amp mode validity.
+Checks the installed `second-advisor` version, installed advisor CLI versions, config validity, configured advisor executable, and Amp mode validity.
 
 ```sh
 second-advisor doctor
@@ -277,7 +286,7 @@ Validation rules:
 | Codex | `codex exec -m <model> --config model_reasoning_effort=<thinking> <prompt>` |
 | opencode | `opencode run -m <model> --variant <thinking> <prompt>` |
 | Grok | `grok -m <model> --reasoning-effort <thinking> -p <prompt>` |
-| Pi | `pi --model <model> --thinking <thinking> -p <prompt>` |
+| Pi | `pi --model <provider/model> --thinking <thinking> -p <prompt>` |
 | Droid | `droid exec -m <model> --reasoning-effort <thinking> <prompt>` |
 | Amp | `amp --mode <mode> --effort <thinking> --execute <prompt>` |
 | Kimi | `kimi -m <model> -p <prompt>` |

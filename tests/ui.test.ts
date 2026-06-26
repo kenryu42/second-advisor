@@ -57,6 +57,31 @@ async function runCli(
   };
 }
 
+async function runDoctorWithAmpFixture(
+  extraCommands: Record<string, string> = {},
+) {
+  const fixture = await createCliFixture(
+    { advisor: "amp", model: "deep", thinking: "max" },
+    "amp",
+    "#!/bin/sh\necho amp 1.0.0\n",
+  );
+
+  await Promise.all(
+    Object.entries(extraCommands).map(async (command) => {
+      await Bun.write(path.join(fixture.bin, command[0]), command[1]);
+      await chmod(path.join(fixture.bin, command[0]), 0o755);
+    }),
+  );
+
+  return runCli(["doctor"], {
+    env: {
+      ...process.env,
+      HOME: fixture.home,
+      PATH: fixture.bin,
+    },
+  });
+}
+
 test("filters coding CLI choices to installed advisors", () => {
   expect(
     getInstalledAdvisorChoices((advisor) =>
@@ -176,24 +201,31 @@ test("formats Kimi setup without thinking row", () => {
 });
 
 test("doctor output omits redundant configured CLI success lines", async () => {
-  const fixture = await createCliFixture(
-    { advisor: "amp", model: "deep", thinking: "max" },
-    "amp",
-    "#!/bin/sh\necho amp 1.0.0\n",
-  );
-
-  const result = await runCli(["doctor"], {
-    env: {
-      ...process.env,
-      HOME: fixture.home,
-      PATH: fixture.bin,
-    },
-  });
+  const result = await runDoctorWithAmpFixture();
 
   expect(result.exitCode).toBe(0);
   expect(result.output).toContain("Doctor passed.");
   expect(result.output).not.toContain("Executable found:");
   expect(result.output).not.toContain("version check OK.");
+});
+
+test("doctor output includes installed second-advisor version", async () => {
+  const result = await runDoctorWithAmpFixture({
+    "second-advisor": "#!/bin/sh\necho second-advisor 9.9.9\n",
+  });
+
+  expect(result.exitCode).toBe(0);
+  expect(result.output).toContain("second-advisor");
+  expect(result.output).toContain("second-advisor 9.9.9");
+});
+
+test("prints the package version", async () => {
+  const result = await runCli(["--version"]);
+
+  expect(result.exitCode).toBe(0);
+  expect(result.output.trim()).toBe(
+    JSON.parse(await Bun.file("package.json").text()).version,
+  );
 });
 
 test("debug prompt output includes the advisor command", async () => {

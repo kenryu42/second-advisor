@@ -136,7 +136,7 @@ export function buildAdvisorCommand(
       command: "pi",
       args: [
         "--model",
-        parsePiModelTableRow(config.model)?.model || config.model,
+        formatPiModel(config.model),
         "--thinking",
         config.thinking,
         "-p",
@@ -211,6 +211,12 @@ export function parsePiModelTableRow(value: string) {
     thinking: cells[4],
     images: cells[5],
   };
+}
+
+function formatPiModel(value: string) {
+  const model = parsePiModelTableRow(value);
+  if (!model) return value;
+  return `${model.provider}/${model.model}`;
 }
 
 export function isAdvisor(value: unknown): value is Advisor {

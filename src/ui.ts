@@ -35,7 +35,7 @@ import { loadModelChoices } from "./models.js";
 import { getVersionArgs, resolveExecutable, runCommand } from "./process.js";
 
 type AdvisorDoctorCheck = {
-  cli: Advisor;
+  cli: string;
   installed: boolean;
   path: string;
   version: string;
@@ -146,32 +146,39 @@ export function formatAdvisorDoctorTable(rows: AdvisorDoctorCheck[]) {
 }
 
 async function getAdvisorDoctorChecks(): Promise<AdvisorDoctorCheck[]> {
-  return Promise.all(
-    advisorChoices.map(async (advisor) => {
-      const executable = resolveExecutable(advisor);
-      if (!executable) {
-        return {
-          cli: advisor,
-          installed: false,
-          path: "-",
-          version: "not installed",
-        };
-      }
+  return [
+    await getDoctorCheck("second-advisor"),
+    ...(await Promise.all(
+      advisorChoices.map(async (advisor) => {
+        return getDoctorCheck(advisor);
+      }),
+    )),
+  ];
+}
 
-      const version = await runCommand(advisor, getVersionArgs(), {
-        pipeOutput: true,
-      });
-      return {
-        cli: advisor,
-        installed: true,
-        path: executable,
-        version:
-          version.exitCode === 0
-            ? normalizeVersionOutput(version.stdout, version.stderr)
-            : "version check failed",
-      };
-    }),
-  );
+async function getDoctorCheck(cli: string): Promise<AdvisorDoctorCheck> {
+  const executable = resolveExecutable(cli);
+  if (!executable) {
+    return {
+      cli,
+      installed: false,
+      path: "-",
+      version: "not installed",
+    };
+  }
+
+  const version = await runCommand(cli, getVersionArgs(), {
+    pipeOutput: true,
+  });
+  return {
+    cli,
+    installed: true,
+    path: executable,
+    version:
+      version.exitCode === 0
+        ? normalizeVersionOutput(version.stdout, version.stderr)
+        : "version check failed",
+  };
 }
 
 export async function runMenu() {

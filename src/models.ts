@@ -86,11 +86,19 @@ function extractDroidModels(output: string) {
 function extractPiModels(output: string) {
   return output
     .split(/\r?\n/)
-    .map((line) => line.trim().split(/\s{2,}/)[1])
+    .map(formatPiModelTableChoice)
     .filter(
       (value): value is string =>
-        value !== undefined && value !== "model" && !/^-+$/.test(value),
+        value !== undefined && value !== "provider/model",
     );
+}
+
+function formatPiModelTableChoice(line: string) {
+  const cells = line.trim().split(/\s{2,}/);
+  if (cells.length < 2 || cells[0] === "provider" || /^-+$/.test(cells[0])) {
+    return undefined;
+  }
+  return `${cells[0]}/${cells[1]}`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
