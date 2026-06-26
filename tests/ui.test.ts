@@ -7,6 +7,7 @@ import {
   appTitle,
   formatAdvisorDoctorTable,
   formatAdvisorDoctorVersions,
+  formatSetupDiff,
   formatStatus,
   getInstalledAdvisorChoices,
   normalizeVersionOutput,
@@ -56,6 +57,36 @@ async function runCli(
     exitCode: await child.exited,
     output: `${await new Response(child.stdout).text()}\n${await new Response(child.stderr).text()}`,
   };
+}
+
+function expectSetupUpdated(
+  result: Awaited<ReturnType<typeof setupSecondAdvisorReview>>,
+  files: string[],
+) {
+  expect(result.updated.map((update) => update.file)).toEqual(files);
+  expect(result.skipped).toEqual([]);
+  expect(result.errors).toEqual([]);
+}
+
+async function expectFileContent(cwd: string, file: string, content: string) {
+  expect(await readFile(path.join(cwd, file), "utf8")).toBe(content);
+}
+
+async function expectMalformedSetupPreservesContent(content: string) {
+  const cwd = await mkdtemp(path.join(tmpdir(), "second-advisor-setup-"));
+  await Bun.write(path.join(cwd, "AGENTS.md"), content);
+
+  const result = await setupSecondAdvisorReview(cwd);
+
+  expect(result.updated).toEqual([]);
+  expect(result.skipped).toEqual([]);
+  expect(result.errors).toEqual([
+    {
+      file: "AGENTS.md",
+      message: "Malformed second-advisor managed block markers.",
+    },
+  ]);
+  await expectFileContent(cwd, "AGENTS.md", content);
 }
 
 async function runDoctorWithAmpFixture(
@@ -343,9 +374,11 @@ test("debug prompt output includes the advisor command", async () => {
 });
 
 test("second advisor review instructions wait for long-running reviews", () => {
+  expect(secondAdvisorReviewBlock).toContain("<!-- second-advisor:start -->");
   expect(secondAdvisorReviewBlock).toContain(
     "Wait for the second-advisor command to finish as long as it is still running without crashing or outputting an error, even if it produces no output for a long time.",
   );
+  expect(secondAdvisorReviewBlock).toContain("<!-- second-advisor:end -->");
   expect(secondAdvisorReviewBlock).not.toContain("blocking forever");
 });
 
@@ -355,8 +388,12 @@ test("setup appends second advisor review instructions to AGENTS.md", async () =
 
   const result = await setupSecondAdvisorReview(cwd);
 
-  expect(result).toEqual({ updated: ["AGENTS.md"], skipped: [] });
-  expect(await readFile(path.join(cwd, "AGENTS.md"), "utf8")).toBe(
+  expectSetupUpdated(result, ["AGENTS.md"]);
+  expect(result.updated[0]?.diff).toContain("@@ -1,1 +1,19 @@");
+  expect(result.updated[0]?.diff).toContain("+<!-- second-advisor:start -->");
+  await expectFileContent(
+    cwd,
+    "AGENTS.md",
     `# Instructions\n\n${secondAdvisorReviewBlock}\n`,
   );
 });
@@ -367,8 +404,10 @@ test("setup appends second advisor review instructions to CLAUDE.md", async () =
 
   const result = await setupSecondAdvisorReview(cwd);
 
-  expect(result).toEqual({ updated: ["CLAUDE.md"], skipped: [] });
-  expect(await readFile(path.join(cwd, "CLAUDE.md"), "utf8")).toBe(
+  expectSetupUpdated(result, ["CLAUDE.md"]);
+  await expectFileContent(
+    cwd,
+    "CLAUDE.md",
     `# Instructions\n\n${secondAdvisorReviewBlock}\n`,
   );
 });
@@ -380,11 +419,15 @@ test("setup appends to both supported agent instruction files", async () => {
 
   const result = await setupSecondAdvisorReview(cwd);
 
-  expect(result).toEqual({ updated: ["AGENTS.md", "CLAUDE.md"], skipped: [] });
-  expect(await readFile(path.join(cwd, "AGENTS.md"), "utf8")).toBe(
+  expectSetupUpdated(result, ["AGENTS.md", "CLAUDE.md"]);
+  await expectFileContent(
+    cwd,
+    "AGENTS.md",
     `# Agents\n\n${secondAdvisorReviewBlock}\n`,
   );
-  expect(await readFile(path.join(cwd, "CLAUDE.md"), "utf8")).toBe(
+  await expectFileContent(
+    cwd,
+    "CLAUDE.md",
     `# Claude\n\n${secondAdvisorReviewBlock}\n`,
   );
 });
@@ -398,9 +441,163 @@ test("setup does not duplicate existing second advisor review instructions", asy
 
   const result = await setupSecondAdvisorReview(cwd);
 
-  expect(result).toEqual({ updated: [], skipped: ["AGENTS.md"] });
-  expect(await readFile(path.join(cwd, "AGENTS.md"), "utf8")).toBe(
+  expect(result).toEqual({ updated: [], skipped: ["AGENTS.md"], errors: [] });
+  await expectFileContent(
+    cwd,
+    "AGENTS.md",
     `# Instructions\n\n${secondAdvisorReviewBlock}\n`,
+  );
+});
+
+test("setup replaces stale marked second advisor review instructions", async () => {
+  const cwd = await mkdtemp(path.join(tmpdir(), "second-advisor-setup-"));
+  await Bun.write(
+    path.join(cwd, "AGENTS.md"),
+    `# Instructions\n\n<!-- second-advisor:start -->\n## Second Advisor Review\n\nold instructions\n<!-- second-advisor:end -->\n\n## Other\nKeep this.\n`,
+  );
+
+  const result = await setupSecondAdvisorReview(cwd);
+
+  expectSetupUpdated(result, ["AGENTS.md"]);
+  expect(result.updated[0]?.diff).toContain("-old instructions");
+  await expectFileContent(
+    cwd,
+    "AGENTS.md",
+    `# Instructions\n\n${secondAdvisorReviewBlock}\n\n## Other\nKeep this.\n`,
+  );
+});
+
+test("setup does not color returned diffs", async () => {
+  const cwd = await mkdtemp(path.join(tmpdir(), "second-advisor-setup-"));
+  await Bun.write(
+    path.join(cwd, "AGENTS.md"),
+    `# Instructions\n\n<!-- second-advisor:start -->\n## Second Advisor Review\n\nold instructions\n<!-- second-advisor:end -->\n`,
+  );
+
+  const result = await setupSecondAdvisorReview(cwd);
+
+  expect(result.updated[0]?.diff).toContain("-old instructions");
+  expect(result.updated[0]?.diff).not.toContain("\u001b[");
+});
+
+test("setup replaces legacy unmarked second advisor review instructions", async () => {
+  const cwd = await mkdtemp(path.join(tmpdir(), "second-advisor-setup-"));
+  await Bun.write(
+    path.join(cwd, "AGENTS.md"),
+    `# Instructions\n\n## Second Advisor Review\n\nold instructions\n\n## Other\nKeep this.\n`,
+  );
+
+  const result = await setupSecondAdvisorReview(cwd);
+
+  expectSetupUpdated(result, ["AGENTS.md"]);
+  await expectFileContent(
+    cwd,
+    "AGENTS.md",
+    `# Instructions\n\n${secondAdvisorReviewBlock}\n\n## Other\nKeep this.\n`,
+  );
+});
+
+test("setup replaces legacy unmarked second advisor review instructions at EOF", async () => {
+  const cwd = await mkdtemp(path.join(tmpdir(), "second-advisor-setup-"));
+  await Bun.write(
+    path.join(cwd, "AGENTS.md"),
+    "# Instructions\n\n## Second Advisor Review\n\nold instructions",
+  );
+
+  const result = await setupSecondAdvisorReview(cwd);
+
+  expectSetupUpdated(result, ["AGENTS.md"]);
+  await expectFileContent(
+    cwd,
+    "AGENTS.md",
+    `# Instructions\n\n${secondAdvisorReviewBlock}\n`,
+  );
+});
+
+test("setup does not edit files with malformed second advisor markers", async () => {
+  await expectMalformedSetupPreservesContent(
+    `# Instructions\n\n<!-- second-advisor:start -->\n## Second Advisor Review\n`,
+  );
+});
+
+test("setup does not edit files with duplicate second advisor markers", async () => {
+  await expectMalformedSetupPreservesContent(
+    `${secondAdvisorReviewBlock}\n\n${secondAdvisorReviewBlock}\n`,
+  );
+});
+
+test("setup does not edit files with second advisor markers out of order", async () => {
+  await expectMalformedSetupPreservesContent(
+    `# Instructions\n\n<!-- second-advisor:end -->\nold\n<!-- second-advisor:start -->\n`,
+  );
+});
+
+test("formats setup diffs without color", () => {
+  expect(
+    formatSetupDiff(
+      "AGENTS.md",
+      "# Instructions\n\nold\n",
+      "# Instructions\n\nnew\n",
+      false,
+    ),
+  ).toBe(`--- AGENTS.md
++++ AGENTS.md
+@@ -1,3 +1,3 @@
+ # Instructions
+ 
+-old
++new`);
+});
+
+test("formats setup diffs with color", () => {
+  const diff = formatSetupDiff(
+    "AGENTS.md",
+    "# Instructions\n\nold\n",
+    "# Instructions\n\nnew\n",
+    true,
+  );
+
+  expect(diff).toContain("\u001b[36m@@ -1,3 +1,3 @@\u001b[0m");
+  expect(diff).toContain("\u001b[31m-old\u001b[0m");
+  expect(diff).toContain("\u001b[32m+new\u001b[0m");
+});
+
+test("setup command reports a unified diff for changed files", async () => {
+  const cwd = await mkdtemp(path.join(tmpdir(), "second-advisor-setup-"));
+  await Bun.write(
+    path.join(cwd, "AGENTS.md"),
+    "# Instructions\n\n## Second Advisor Review\n\nold instructions\n",
+  );
+
+  const result = await runCli(["setup"], {
+    cwd,
+    env: { ...process.env, NO_COLOR: "1" },
+  });
+
+  expect(result.exitCode).toBe(0);
+  expect(result.output).toContain("Updated: AGENTS.md");
+  expect(result.output).toContain("--- AGENTS.md");
+  expect(result.output).toContain("+++ AGENTS.md");
+  expect(result.output).toContain("-old instructions");
+  expect(result.output).toContain("+<!-- second-advisor:start -->");
+  expect(result.output).not.toContain("\u001b[31m-old instructions");
+  expect(result.output).not.toContain(
+    "\u001b[32m+<!-- second-advisor:start -->",
+  );
+});
+
+test("setup command reports malformed marker errors", async () => {
+  const cwd = await mkdtemp(path.join(tmpdir(), "second-advisor-setup-"));
+  await Bun.write(
+    path.join(cwd, "AGENTS.md"),
+    "# Instructions\n\n<!-- second-advisor:start -->\n",
+  );
+
+  const result = await runCli(["setup"], { cwd });
+
+  expect(result.exitCode).toBe(1);
+  expect(result.output).toContain(
+    "AGENTS.md: Malformed second-advisor managed block markers.",
   );
 });
 
@@ -410,6 +607,7 @@ test("setup exits with an error when no supported instruction file exists", asyn
   await expect(setupSecondAdvisorReview(cwd)).resolves.toEqual({
     updated: [],
     skipped: [],
+    errors: [],
   });
 });
 

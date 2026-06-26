@@ -219,7 +219,7 @@ During interactive setup, advisors with model-list commands fall back to manual 
 
 ### `second-advisor setup`
 
-Looks for `AGENTS.md` and `CLAUDE.md` in the current working directory and appends the Second Advisor Review instructions to each file found.
+Looks for `AGENTS.md` and `CLAUDE.md` in the current working directory and installs or updates the managed Second Advisor Review instructions in each file found.
 
 ```sh
 second-advisor setup
@@ -228,8 +228,13 @@ second-advisor setup
 Behavior:
 
 - Updates both files if both exist.
-- Skips a file if it already contains `## Second Advisor Review`.
+- Appends the managed block when it is missing.
+- Updates stale managed or legacy `## Second Advisor Review` blocks in place.
+- Skips a file when the managed block already matches the latest text.
+- Prints a focused unified diff for each file it edits.
+- Leaves files with malformed Second Advisor markers unchanged and reports an error.
 - Exits with code `1` if neither `AGENTS.md` nor `CLAUDE.md` exists in the current directory.
+- Exits with code `1` if any file cannot be updated safely.
 - Does not search parent directories.
 
 The appended block tells agents to ask for a second opinion after substantial work and to use:

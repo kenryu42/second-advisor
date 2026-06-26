@@ -74,6 +74,7 @@ function foo() {
 - Avoid mocks as much as possible
 - Test actual implementation, do not duplicate logic into tests
 
+<!-- second-advisor:start -->
 ## Second Advisor Review
 
 After completing substantial work, especially code changes, skill changes, CLI behavior changes, or agent workflow changes, ask for a second opinion before the final response.
@@ -82,10 +83,11 @@ Use:
 
 second-advisor "<review prompt>"
 
-The second opinion must be read and considered. Fix valid high-priority issues, then rerun relevant tests. If the second-advisor command hangs or fails, report that clearly instead of blocking forever.
+The second opinion must be read and considered. Wait for the second-advisor command to finish as long as it is still running without crashing or outputting an error, even if it produces no output for a long time. Fix valid high-priority issues, then rerun relevant tests. If the second-advisor command crashes or outputs an error, report that clearly.
 
 Do not run second-advisor for:
 - simple Q&A
 - tiny documentation wording changes
 - status updates
 - tasks where the user explicitly says not to
+<!-- second-advisor:end -->
