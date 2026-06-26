@@ -1,6 +1,5 @@
 #!/usr/bin/env bun
 import { Command } from "commander";
-import { readPackageVersion } from "./package.js";
 import { parseCliRequest } from "./routing.js";
 import {
   runDoctor,
@@ -10,6 +9,7 @@ import {
   runPrompt,
   runSetup,
   runStatus,
+  runVersion,
 } from "./ui.js";
 
 export {
@@ -25,10 +25,10 @@ async function main() {
   const program = new Command()
     .name("second-advisor")
     .description("Consult a configured coding CLI for a second opinion.")
-    .version(readPackageVersion(), "-v, --version", "display version")
     .argument("[input...]", "prompt to send to the configured advisor")
     .option("--debug", "print the coding CLI command before running it")
     .option("--json", "print command output as JSON when supported")
+    .option("-v, --version", "display compact runtime identity")
     .allowUnknownOption(false)
     .helpOption("-h, --help", "display help")
     .addHelpText(
@@ -45,8 +45,18 @@ Examples:
     );
 
   program.parse(process.argv);
+  const options = program.opts<{
+    debug?: boolean;
+    json?: boolean;
+    version?: boolean;
+  }>();
+
+  if (options.version === true) {
+    await runVersion();
+    return;
+  }
+
   const request = parseCliRequest(program.args);
-  const options = program.opts<{ debug?: boolean; json?: boolean }>();
 
   if (request.kind === "menu") {
     await runMenu();

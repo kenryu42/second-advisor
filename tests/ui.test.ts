@@ -294,13 +294,30 @@ test("doctor can output json for debugging", async () => {
   });
 });
 
-test("prints the package version", async () => {
-  const result = await runCli(["--version"]);
+test("prints compact runtime identity", async () => {
+  const fixture = await createCliFixture(
+    { advisor: "amp", model: "deep", thinking: "max" },
+    "amp",
+    "#!/bin/sh\necho amp 1.0.0\n",
+  );
+
+  const result = await runCli(["--version"], {
+    env: {
+      ...process.env,
+      HOME: fixture.home,
+      PATH: fixture.bin,
+    },
+  });
 
   expect(result.exitCode).toBe(0);
-  expect(result.output.trim()).toBe(
-    JSON.parse(await Bun.file("package.json").text()).version,
-  );
+  expect(
+    result.output.trim(),
+  ).toBe(`second-advisor ${JSON.parse(await Bun.file("package.json").text()).version}
+runtime bun ${Bun.version}
+runtime node ${process.version}
+config ~/.config/second-advisor/config.json
+advisor amp
+advisor version amp 1.0.0`);
 });
 
 test("debug prompt output includes the advisor command", async () => {
@@ -323,6 +340,13 @@ test("debug prompt output includes the advisor command", async () => {
     "amp --mode rush --effort low --execute 'say hi'",
   );
   expect(result.output).toContain("advisor ran");
+});
+
+test("second advisor review instructions wait for long-running reviews", () => {
+  expect(secondAdvisorReviewBlock).toContain(
+    "Wait for the second-advisor command to finish as long as it is still running without crashing or outputting an error, even if it produces no output for a long time.",
+  );
+  expect(secondAdvisorReviewBlock).not.toContain("blocking forever");
 });
 
 test("setup appends second advisor review instructions to AGENTS.md", async () => {

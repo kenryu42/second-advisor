@@ -180,7 +180,7 @@ second-advisor status
 
 ### `second-advisor --version`
 
-Prints the installed CLI version.
+Prints compact runtime identity information: the installed `second-advisor` version, Bun and Node versions, config path, configured advisor, and advisor CLI version when available.
 
 ```sh
 second-advisor --version

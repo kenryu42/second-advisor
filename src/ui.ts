@@ -32,6 +32,7 @@ import {
   writeConfig,
 } from "./config.js";
 import { loadModelChoices } from "./models.js";
+import { readPackageVersion } from "./package.js";
 import { getVersionArgs, resolveExecutable, runCommand } from "./process.js";
 
 type AdvisorDoctorCheck = {
@@ -56,7 +57,7 @@ Use:
 
 second-advisor "<review prompt>"
 
-The second opinion must be read and considered. Fix valid high-priority issues, then rerun relevant tests. If the second-advisor command hangs or fails, report that clearly instead of blocking forever.
+The second opinion must be read and considered. Wait for the second-advisor command to finish as long as it is still running without crashing or outputting an error, even if it produces no output for a long time. Fix valid high-priority issues, then rerun relevant tests. If the second-advisor command crashes or outputs an error, report that clearly.
 
 Do not run second-advisor for:
 - simple Q&A
@@ -345,6 +346,38 @@ export async function runSetup(cwd = process.cwd()) {
   result.updated.forEach((file) => {
     log.success(`Updated: ${file}`);
   });
+}
+
+export async function runVersion() {
+  console.log(await formatVersionIdentity());
+}
+
+async function formatVersionIdentity() {
+  const config = await readConfigIfPresent();
+  const executable = config ? resolveExecutable(config.advisor) : undefined;
+  const advisorVersion =
+    config && executable
+      ? await getCliVersion(config.advisor)
+      : config
+        ? "not found on PATH"
+        : "not configured";
+
+  return [
+    `second-advisor ${readPackageVersion()}`,
+    `runtime bun ${Bun.version}`,
+    `runtime node ${process.version}`,
+    `config ${formatDisplayPath(configPath)}`,
+    `advisor ${config?.advisor || "not configured"}`,
+    `advisor version ${advisorVersion}`,
+  ].join("\n");
+}
+
+async function getCliVersion(cli: string) {
+  const version = await runCommand(cli, getVersionArgs(), {
+    pipeOutput: true,
+  });
+  if (version.exitCode !== 0) return "version check failed";
+  return normalizeVersionOutput(version.stdout, version.stderr);
 }
 
 export async function setupSecondAdvisorReview(cwd = process.cwd()) {
