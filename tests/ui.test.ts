@@ -1,10 +1,12 @@
 import { expect, test } from "bun:test";
 import { chmod, mkdir, mkdtemp, readFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import type { Config } from "../src/advisors.js";
 import {
+  appTitle,
   formatAdvisorDoctorTable,
+  formatStatus,
   getInstalledAdvisorChoices,
   normalizeVersionOutput,
   runWithLoader,
@@ -61,6 +63,10 @@ test("filters coding CLI choices to installed advisors", () => {
       ["codex", "amp"].includes(advisor) ? `/bin/${advisor}` : undefined,
     ),
   ).toEqual(["codex", "amp"]);
+});
+
+test("uses a human-readable app title", () => {
+  expect(appTitle).toBe("Second Advisor");
 });
 
 test("returns no coding CLI choices when supported advisors are not installed", () => {
@@ -123,6 +129,50 @@ test("runs doctor work with a loader indicator", async () => {
     "start:Checking coding CLI versions",
     "stop:Checked coding CLI versions",
   ]);
+});
+
+test("formats current setup as labelled rows", () => {
+  expect(
+    formatStatus(
+      { advisor: "pi", model: "glm-5.2", thinking: "high" },
+      path.join(homedir(), ".local", "bin", "pi"),
+    ),
+  ).toBe(`Current setup
+  Coding CLI pi
+  Model      glm-5.2
+  Thinking   high
+  Config     ~/.config/second-advisor/config.json
+  Executable ~/.local/bin/pi`);
+});
+
+test("formats legacy Pi model table rows as readable metadata", () => {
+  expect(
+    formatStatus(
+      {
+        advisor: "pi",
+        model:
+          "zai                    glm-5.2                             1M       128K     yes       no",
+        thinking: "high",
+      },
+      "/opt/homebrew/bin/pi",
+    ),
+  ).toBe(`Current setup
+  Coding CLI pi
+  Model      zai / glm-5.2
+  Context    1M input / 128K output
+  Thinking   yes, high
+  Config     ~/.config/second-advisor/config.json
+  Executable /opt/homebrew/bin/pi`);
+});
+
+test("formats Kimi setup without thinking row", () => {
+  expect(
+    formatStatus({ advisor: "kimi", model: "kimi-k2" }, undefined),
+  ).toBe(`Current setup
+  Coding CLI kimi
+  Model      kimi-k2
+  Config     ~/.config/second-advisor/config.json
+  Executable not found on PATH`);
 });
 
 test("doctor output omits redundant configured CLI success lines", async () => {

@@ -48,7 +48,30 @@ Supported advisors:
 
 ## Installation
 
-Install dependencies:
+Install globally with Bun:
+
+```sh
+bun install -g second-advisor
+```
+
+Or install globally with npm:
+
+```sh
+npm install -g second-advisor
+```
+
+Both commands are available after installation:
+
+```sh
+second-advisor --help
+sa --help
+```
+
+Depending on your package manager setup, you may need its global bin directory on `PATH`.
+
+### Local Development
+
+Clone the repository, then install dependencies:
 
 ```sh
 bun install
@@ -65,8 +88,6 @@ For local command usage, link the package so the `bin` entries are available:
 ```sh
 bun link
 ```
-
-Depending on your Bun setup, you may also need Bun's global bin directory on `PATH`.
 
 After linking, both commands point to the same CLI:
 

@@ -136,7 +136,7 @@ export function buildAdvisorCommand(
       command: "pi",
       args: [
         "--model",
-        config.model,
+        parsePiModelTableRow(config.model)?.model || config.model,
         "--thinking",
         config.thinking,
         "-p",
@@ -198,6 +198,19 @@ export function getThinkingOptions(
     return [...ampThinking];
   }
   return ["low", "medium", "high", "xhigh"];
+}
+
+export function parsePiModelTableRow(value: string) {
+  const cells = value.trim().split(/\s{2,}/);
+  if (cells.length !== 6) return null;
+  return {
+    provider: cells[0],
+    model: cells[1],
+    context: cells[2],
+    maxOutput: cells[3],
+    thinking: cells[4],
+    images: cells[5],
+  };
 }
 
 export function isAdvisor(value: unknown): value is Advisor {

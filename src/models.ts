@@ -24,6 +24,7 @@ export function parseModelChoices(advisor: Advisor, output: string) {
   if (advisor === "grok") return extractGrokModels(output);
   if (advisor === "kimi") return extractKimiModels(output);
   if (advisor === "droid") return extractDroidModels(output);
+  if (advisor === "pi") return extractPiModels(output);
   return output
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -80,6 +81,16 @@ function extractDroidModels(output: string) {
     .split(/\r?\n/)
     .map((line) => line.trim().split(/\s+/)[0])
     .filter((value) => value.length > 0);
+}
+
+function extractPiModels(output: string) {
+  return output
+    .split(/\r?\n/)
+    .map((line) => line.trim().split(/\s{2,}/)[1])
+    .filter(
+      (value): value is string =>
+        value !== undefined && value !== "model" && !/^-+$/.test(value),
+    );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

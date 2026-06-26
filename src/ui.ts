@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import path from "node:path";
 import {
   cancel,
@@ -21,6 +22,7 @@ import {
   getModelListCommand,
   getThinkingOptions,
   isAdvisor,
+  parsePiModelTableRow,
   summarizeConfig,
 } from "./advisors.js";
 import {
@@ -43,6 +45,8 @@ type Loader = {
   start: (message: string) => void;
   stop: (message: string) => void;
 };
+
+export const appTitle = "Second Advisor";
 
 export const secondAdvisorReviewBlock = `## Second Advisor Review
 
@@ -171,7 +175,7 @@ async function getAdvisorDoctorChecks(): Promise<AdvisorDoctorCheck[]> {
 }
 
 export async function runMenu() {
-  intro("second-advisor");
+  intro(appTitle);
   const config = await readConfigIfPresent();
 
   if (!config) {
@@ -192,14 +196,28 @@ export async function runMenu() {
   const action = await select({
     message: "What would you like to change?",
     options: [
-      { value: "advisor", label: "Change coding CLI" },
+      {
+        value: "advisor",
+        label: "Coding CLI",
+        hint: "Change the executable/tool used for coding",
+      },
       {
         value: "model",
-        label: config.advisor === "amp" ? "Change mode" : "Change model",
+        label: config.advisor === "amp" ? "Mode" : "Model",
+        hint:
+          config.advisor === "amp" ? "Pick an Amp mode" : "Pick provider model",
       },
-      { value: "thinking", label: "Change thinking/effort" },
-      { value: "models", label: "Show available models/modes" },
-      { value: "doctor", label: "Run doctor" },
+      {
+        value: "thinking",
+        label: "Thinking effort",
+        hint: "Toggle thinking and effort level",
+      },
+      {
+        value: "models",
+        label: "Models/modes",
+        hint: "View available options",
+      },
+      { value: "doctor", label: "Doctor", hint: "Check config and executable" },
       { value: "exit", label: "Exit" },
     ],
   });
@@ -228,9 +246,9 @@ export async function runMenu() {
 }
 
 export async function runInit() {
-  intro("second-advisor init");
+  intro(`${appTitle} init`);
   await writeConfig(await promptForConfig());
-  outro("second-advisor is configured.");
+  outro(`${appTitle} is configured.`);
 }
 
 export async function runStatus() {
@@ -321,7 +339,7 @@ export async function setupSecondAdvisorReview(cwd = process.cwd()) {
 }
 
 export async function runDoctor() {
-  intro("second-advisor doctor");
+  intro(`${appTitle} doctor`);
   const advisorChecks = await runWithLoader(
     spinner(),
     "Checking coding CLI versions",
@@ -535,12 +553,47 @@ async function loadChoicesWithSpinner(advisor: Advisor) {
   return choices;
 }
 
-function formatStatus(config: Config, executable?: string) {
+export function formatStatus(config: Config, executable?: string) {
+  const modelRows = formatModelRows(config);
+  const rows = [
+    ["Coding CLI", config.advisor],
+    ...modelRows,
+    ...("thinking" in config && !modelRows.some((row) => row[0] === "Thinking")
+      ? [["Thinking", config.thinking]]
+      : []),
+    ["Config", formatDisplayPath(configPath)],
+    [
+      "Executable",
+      executable ? formatDisplayPath(executable) : "not found on PATH",
+    ],
+  ];
+  const labelWidth = Math.max(...rows.map((row) => row[0].length));
+
   return [
-    `Current setup: ${summarizeConfig(config)}`,
-    `Config: ${configPath}`,
-    `Executable: ${executable || "not found on PATH"}`,
+    "Current setup",
+    ...rows.map((row) => `  ${row[0].padEnd(labelWidth)} ${row[1]}`),
   ].join("\n");
+}
+
+function formatModelRows(config: Config) {
+  if (config.advisor === "pi") {
+    const piModel = parsePiModelTableRow(config.model);
+    if (!piModel) return [["Model", config.model]];
+    return [
+      ["Model", `${piModel.provider} / ${piModel.model}`],
+      ["Context", `${piModel.context} input / ${piModel.maxOutput} output`],
+      ["Thinking", `${piModel.thinking}, ${config.thinking}`],
+    ];
+  }
+  return [[config.advisor === "amp" ? "Mode" : "Model", config.model]];
+}
+
+function formatDisplayPath(value: string) {
+  if (value === homedir()) return "~";
+  if (value.startsWith(`${homedir()}${path.sep}`)) {
+    return `~${path.sep}${value.slice(homedir().length + 1)}`;
+  }
+  return value;
 }
 
 function parseAdvisorInput(input: string) {

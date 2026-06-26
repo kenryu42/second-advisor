@@ -85,6 +85,21 @@ test("builds non-interactive commands for every advisor", () => {
 
   expect(
     buildAdvisorCommand(
+      {
+        advisor: "pi",
+        model:
+          "zai                    glm-5.2                             1M       128K     yes       no",
+        thinking: "high",
+      },
+      "review this",
+    ),
+  ).toEqual({
+    command: "pi",
+    args: ["--model", "glm-5.2", "--thinking", "high", "-p", "review this"],
+  });
+
+  expect(
+    buildAdvisorCommand(
       { advisor: "droid", model: "claude-opus-4-8", thinking: "medium" },
       "review this",
     ),
