@@ -153,7 +153,15 @@ test("uses compact doctor output when the table would wrap", () => {
         {
           cli: "second-advisor",
           installed: true,
-          path: "/Users/kenryu/.nvm/versions/node/v24.16.0/bin/second-advisor",
+          path: path.join(
+            homedir(),
+            ".nvm",
+            "versions",
+            "node",
+            "v24.16.0",
+            "bin",
+            "second-advisor",
+          ),
           version: "version check failed",
         },
         {
