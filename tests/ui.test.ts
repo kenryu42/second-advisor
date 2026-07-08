@@ -903,9 +903,26 @@ test("setup remove command reports when there is nothing to remove", async () =>
 
 test("remove flag is only valid for setup", async () => {
   const result = await runCli(["status", "--remove"]);
+  const home = await mkdtemp(path.join(tmpdir(), "second-advisor-home-"));
+  const promptFile = path.join(
+    await mkdtemp(path.join(tmpdir(), "second-advisor-prompt-")),
+    "prompt.md",
+  );
+  await Bun.write(promptFile, "prompt");
+  const stdinResult = await runCli(["--stdin", "--remove"], {
+    env: { ...process.env, HOME: home },
+    stdin: "prompt",
+  });
+  const fileResult = await runCli(["--file", promptFile, "--remove"], {
+    env: { ...process.env, HOME: home },
+  });
 
   expect(result.exitCode).toBe(1);
   expect(result.output).toContain("--remove can only be used with setup.");
+  expect(stdinResult.exitCode).toBe(1);
+  expect(stdinResult.output).toContain("--remove can only be used with setup.");
+  expect(fileResult.exitCode).toBe(1);
+  expect(fileResult.output).toContain("--remove can only be used with setup.");
 });
 
 test("setup command reports malformed marker errors", async () => {

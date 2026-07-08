@@ -63,6 +63,8 @@ Examples:
     return;
   }
 
+  const request = parseCliRequest(program.args);
+
   if (options.stdin === true && options.file !== undefined) {
     console.error("--stdin and --file cannot be combined.");
     process.exitCode = 1;
@@ -76,6 +78,15 @@ Examples:
     console.error(
       "Prompt input flags cannot be combined with positional input.",
     );
+    process.exitCode = 1;
+    return;
+  }
+
+  if (
+    options.remove === true &&
+    (request.kind !== "command" || request.command !== "setup")
+  ) {
+    console.error("--remove can only be used with setup.");
     process.exitCode = 1;
     return;
   }
@@ -101,17 +112,6 @@ Examples:
     }
 
     await runPrompt(prompt, { debug: options.debug === true });
-    return;
-  }
-
-  const request = parseCliRequest(program.args);
-
-  if (
-    options.remove === true &&
-    (request.kind !== "command" || request.command !== "setup")
-  ) {
-    console.error("--remove can only be used with setup.");
-    process.exitCode = 1;
     return;
   }
 
