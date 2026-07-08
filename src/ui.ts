@@ -31,7 +31,12 @@ import {
 } from "./config.js";
 import { loadModelChoices } from "./models.js";
 import { readPackageVersion } from "./package.js";
-import { getVersionArgs, resolveExecutable, runCommand } from "./process.js";
+import {
+  getVersionArgs,
+  metadataCommandTimeoutMs,
+  resolveExecutable,
+  runCommand,
+} from "./process.js";
 import {
   colorSetupDiff,
   type SetupOptions,
@@ -180,6 +185,7 @@ async function getDoctorCheck(cli: string): Promise<AdvisorDoctorCheck> {
 
   const version = await runCommand(cli, getVersionArgs(), {
     pipeOutput: true,
+    timeoutMs: metadataCommandTimeoutMs,
   });
   return {
     cli,
@@ -376,6 +382,7 @@ async function formatVersionIdentity() {
 async function getCliVersion(cli: string) {
   const version = await runCommand(cli, getVersionArgs(), {
     pipeOutput: true,
+    timeoutMs: metadataCommandTimeoutMs,
   });
   if (version.exitCode !== 0) return "version check failed";
   return normalizeVersionOutput(version.stdout, version.stderr);
