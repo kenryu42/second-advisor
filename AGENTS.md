@@ -77,7 +77,9 @@ function foo() {
 <!-- second-advisor:start -->
 ## Second Advisor Review
 
-After completing substantial work, especially code changes, skill changes, CLI behavior changes, or agent workflow changes, ask for a second opinion before the final response.
+Use second-advisor selectively. For complex or high-risk work, ask for a second opinion before the final response. This is most useful for non-obvious design choices, broad code changes, agent workflow changes, security-sensitive behavior, repeated test/debug failures, or situations where you are uncertain about the approach.
+
+Do not run second-advisor merely because a task includes code edits. For straightforward, localized changes with clear requirements and passing verification, finish normally.
 
 Use:
 

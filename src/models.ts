@@ -4,7 +4,7 @@ import {
   claudeModels,
   getModelListCommand,
 } from "./advisors.js";
-import { runCommand } from "./process.js";
+import { metadataCommandTimeoutMs, runCommand } from "./process.js";
 
 export async function loadModelChoices(advisor: Advisor) {
   if (advisor === "amp") return [...ampModes];
@@ -14,6 +14,7 @@ export async function loadModelChoices(advisor: Advisor) {
 
   const result = await runCommand(command.command, command.args, {
     pipeOutput: true,
+    timeoutMs: metadataCommandTimeoutMs,
   });
   if (result.exitCode !== 0) return [];
   return parseModelChoices(advisor, result.stdout).slice(0, 80);

@@ -4,16 +4,18 @@ import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import type { Config } from "../src/advisors.js";
 import {
+  formatSetupDiff,
+  secondAdvisorReviewBlock,
+  setupSecondAdvisorReview,
+} from "../src/setup.js";
+import {
   appTitle,
   formatAdvisorDoctorTable,
   formatAdvisorDoctorVersions,
-  formatSetupDiff,
   formatStatus,
   getInstalledAdvisorChoices,
   normalizeVersionOutput,
   runWithLoader,
-  secondAdvisorReviewBlock,
-  setupSecondAdvisorReview,
 } from "../src/ui.js";
 
 async function createCliFixture(
@@ -37,7 +39,11 @@ async function createCliFixture(
 
 async function runCli(
   args: string[],
-  options: { cwd?: string; env?: Record<string, string | undefined> } = {},
+  options: {
+    cwd?: string;
+    env?: Record<string, string | undefined>;
+    stdin?: string;
+  } = {},
 ) {
   const child = Bun.spawn(
     [
@@ -50,9 +56,15 @@ async function runCli(
       cwd: options.cwd || process.cwd(),
       env: options.env,
       stderr: "pipe",
+      stdin: options.stdin === undefined ? "ignore" : "pipe",
       stdout: "pipe",
     },
   );
+  if (options.stdin !== undefined) {
+    if (!child.stdin) throw new Error("Expected piped CLI stdin.");
+    child.stdin.write(options.stdin);
+    child.stdin.end();
+  }
   return {
     exitCode: await child.exited,
     output: `${await new Response(child.stdout).text()}\n${await new Response(child.stderr).text()}`,
@@ -384,6 +396,104 @@ test("debug prompt output includes the advisor command", async () => {
   expect(result.output).toContain("advisor ran");
 });
 
+test("prompt execution reads prompt from a file", async () => {
+  const promptFile = path.join(
+    await mkdtemp(path.join(tmpdir(), "second-advisor-prompt-")),
+    "prompt.md",
+  );
+  const prompt = "Review this diff:\n- keep the API stable\n- check errors\n";
+  await Bun.write(promptFile, prompt);
+  const fixture = await createCliFixture(
+    { advisor: "amp", model: "rush", thinking: "low" },
+    "amp",
+    "#!/bin/sh\nprintf '%s\\n' \"$@\"\n",
+  );
+
+  const result = await runCli(["--file", promptFile], {
+    env: {
+      ...process.env,
+      HOME: fixture.home,
+      PATH: fixture.bin,
+    },
+  });
+
+  expect(result.exitCode).toBe(0);
+  expect(result.output).toContain(prompt);
+});
+
+test("prompt execution reads prompt from stdin", async () => {
+  const prompt = "Review stdin input:\n- preserve newlines\n- keep context\n";
+  const fixture = await createCliFixture(
+    { advisor: "amp", model: "rush", thinking: "low" },
+    "amp",
+    "#!/bin/sh\nprintf '%s\\n' \"$@\"\n",
+  );
+
+  const result = await runCli(["--stdin"], {
+    env: {
+      ...process.env,
+      HOME: fixture.home,
+      PATH: fixture.bin,
+    },
+    stdin: prompt,
+  });
+
+  expect(result.exitCode).toBe(0);
+  expect(result.output).toContain(prompt);
+});
+
+test("prompt input sources cannot be combined", async () => {
+  const result = await runCli(["--stdin", "--file", "prompt.txt"], {
+    stdin: "prompt",
+  });
+
+  expect(result.exitCode).toBe(1);
+  expect(result.output).toContain("--stdin and --file cannot be combined.");
+});
+
+test("stdin prompt input cannot be combined with positional input", async () => {
+  const result = await runCli(["--stdin", "positional prompt"], {
+    stdin: "prompt",
+  });
+
+  expect(result.exitCode).toBe(1);
+  expect(result.output).toContain(
+    "Prompt input flags cannot be combined with positional input.",
+  );
+});
+
+test("stdin prompt input cannot be empty", async () => {
+  const result = await runCli(["--stdin"], { stdin: "" });
+
+  expect(result.exitCode).toBe(1);
+  expect(result.output).toContain("Prompt input is empty.");
+});
+
+test("file prompt input cannot be empty", async () => {
+  const promptFile = path.join(
+    await mkdtemp(path.join(tmpdir(), "second-advisor-prompt-")),
+    "prompt.md",
+  );
+  await Bun.write(promptFile, "");
+
+  const result = await runCli(["--file", promptFile]);
+
+  expect(result.exitCode).toBe(1);
+  expect(result.output).toContain("Prompt input is empty.");
+});
+
+test("file prompt input reports unreadable files", async () => {
+  const promptFile = path.join(
+    await mkdtemp(path.join(tmpdir(), "second-advisor-prompt-")),
+    "missing.md",
+  );
+
+  const result = await runCli(["--file", promptFile]);
+
+  expect(result.exitCode).toBe(1);
+  expect(result.output).toContain(`Could not read prompt file: ${promptFile}`);
+});
+
 test("prompt execution marks advisor subprocesses", async () => {
   const fixture = await createCliFixture(
     { advisor: "amp", model: "rush", thinking: "low" },
@@ -403,8 +513,50 @@ test("prompt execution marks advisor subprocesses", async () => {
   expect(result.output).toContain("SECOND_ADVISOR=1");
 });
 
-test("second advisor review instructions wait for long-running reviews", () => {
+test("prompt execution forwards advisor exit codes", async () => {
+  const fixture = await createCliFixture(
+    { advisor: "amp", model: "rush", thinking: "low" },
+    "amp",
+    "#!/bin/sh\nexit 37\n",
+  );
+
+  const result = await runCli(["say hi"], {
+    env: {
+      ...process.env,
+      HOME: fixture.home,
+      PATH: fixture.bin,
+    },
+  });
+
+  expect(result.exitCode).toBe(37);
+});
+
+test("prompt execution treats advisor signal death as failure", async () => {
+  const fixture = await createCliFixture(
+    { advisor: "amp", model: "rush", thinking: "low" },
+    "amp",
+    "#!/bin/sh\nkill -TERM $$\n",
+  );
+
+  const result = await runCli(["say hi"], {
+    env: {
+      ...process.env,
+      HOME: fixture.home,
+      PATH: fixture.bin,
+    },
+  });
+
+  expect(result.exitCode).not.toBe(0);
+});
+
+test("second advisor review instructions reserve reviews for complex work", () => {
   expect(secondAdvisorReviewBlock).toContain("<!-- second-advisor:start -->");
+  expect(secondAdvisorReviewBlock).toContain(
+    "For complex or high-risk work, ask for a second opinion before the final response.",
+  );
+  expect(secondAdvisorReviewBlock).toContain(
+    "Do not run second-advisor merely because a task includes code edits.",
+  );
   expect(secondAdvisorReviewBlock).toContain(
     "Wait for the second-advisor command to finish as long as it is still running without crashing or outputting an error, even if it produces no output for a long time.",
   );
@@ -416,6 +568,9 @@ test("second advisor review instructions wait for long-running reviews", () => {
   );
   expect(secondAdvisorReviewBlock).toContain("<!-- second-advisor:end -->");
   expect(secondAdvisorReviewBlock).not.toContain("blocking forever");
+  expect(secondAdvisorReviewBlock).not.toContain(
+    "After completing substantial work",
+  );
 });
 
 test("setup appends second advisor review instructions to AGENTS.md", async () => {
@@ -701,6 +856,13 @@ test("formats setup diffs without color", () => {
 +new`);
 });
 
+test("formats setup diffs for an empty original file", () => {
+  expect(formatSetupDiff("AGENTS.md", "", "new\n", false)).toBe(`--- AGENTS.md
++++ AGENTS.md
+@@ -0,0 +1,1 @@
++new`);
+});
+
 test("formats setup diffs with color", () => {
   const diff = formatSetupDiff(
     "AGENTS.md",
@@ -760,9 +922,26 @@ test("setup remove command reports when there is nothing to remove", async () =>
 
 test("remove flag is only valid for setup", async () => {
   const result = await runCli(["status", "--remove"]);
+  const home = await mkdtemp(path.join(tmpdir(), "second-advisor-home-"));
+  const promptFile = path.join(
+    await mkdtemp(path.join(tmpdir(), "second-advisor-prompt-")),
+    "prompt.md",
+  );
+  await Bun.write(promptFile, "prompt");
+  const stdinResult = await runCli(["--stdin", "--remove"], {
+    env: { ...process.env, HOME: home },
+    stdin: "prompt",
+  });
+  const fileResult = await runCli(["--file", promptFile, "--remove"], {
+    env: { ...process.env, HOME: home },
+  });
 
   expect(result.exitCode).toBe(1);
   expect(result.output).toContain("--remove can only be used with setup.");
+  expect(stdinResult.exitCode).toBe(1);
+  expect(stdinResult.output).toContain("--remove can only be used with setup.");
+  expect(fileResult.exitCode).toBe(1);
+  expect(fileResult.output).toContain("--remove can only be used with setup.");
 });
 
 test("setup command reports malformed marker errors", async () => {
