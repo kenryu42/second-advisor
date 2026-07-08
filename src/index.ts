@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { readFile } from "node:fs/promises";
 import { Command } from "commander";
 import { parseCliRequest } from "./routing.js";
 import {
@@ -27,6 +28,8 @@ async function main() {
     .description("Consult a configured coding CLI for a second opinion.")
     .argument("[input...]", "prompt to send to the configured advisor")
     .option("--debug", "print the coding CLI command before running it")
+    .option("--stdin", "read the advisor prompt from stdin")
+    .option("--file <path>", "read the advisor prompt from a file")
     .option("--json", "print command output as JSON when supported")
     .option("--remove", "remove managed setup instructions")
     .option("-v, --version", "display compact runtime identity")
@@ -48,13 +51,56 @@ Examples:
   program.parse(process.argv);
   const options = program.opts<{
     debug?: boolean;
+    file?: string;
     json?: boolean;
     remove?: boolean;
+    stdin?: boolean;
     version?: boolean;
   }>();
 
   if (options.version === true) {
     await runVersion();
+    return;
+  }
+
+  if (options.stdin === true && options.file !== undefined) {
+    console.error("--stdin and --file cannot be combined.");
+    process.exitCode = 1;
+    return;
+  }
+
+  if (
+    (options.stdin === true || options.file !== undefined) &&
+    program.args.length > 0
+  ) {
+    console.error(
+      "Prompt input flags cannot be combined with positional input.",
+    );
+    process.exitCode = 1;
+    return;
+  }
+
+  if (options.stdin === true) {
+    const prompt = await Bun.stdin.text();
+    if (prompt.length === 0) {
+      console.error("Prompt input is empty.");
+      process.exitCode = 1;
+      return;
+    }
+
+    await runPrompt(prompt, { debug: options.debug === true });
+    return;
+  }
+
+  if (options.file !== undefined) {
+    const prompt = await readFile(options.file, "utf8");
+    if (prompt.length === 0) {
+      console.error("Prompt input is empty.");
+      process.exitCode = 1;
+      return;
+    }
+
+    await runPrompt(prompt, { debug: options.debug === true });
     return;
   }
 

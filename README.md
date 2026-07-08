@@ -154,9 +154,13 @@ Runs the configured advisor with the given prompt. The prompt is formed by joini
 
 ```sh
 second-advisor "what risks do you see in this change?"
+second-advisor --stdin < review-prompt.md
+second-advisor --file review-prompt.md
 ```
 
 If no config exists, the command exits with an error and asks you to run `second-advisor init`.
+
+Use `--stdin` or `--file` for longer prompts such as review plans, diffs, logs, or transcript excerpts. These prompt sources cannot be combined with each other or with positional prompt arguments.
 
 The first argument is reserved when it is one of the command names: `init`, `doctor`, `models`, `setup`, or `status`. For example, `second-advisor init` runs initialization instead of sending `init` as a prompt.
 

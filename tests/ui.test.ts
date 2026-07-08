@@ -37,7 +37,11 @@ async function createCliFixture(
 
 async function runCli(
   args: string[],
-  options: { cwd?: string; env?: Record<string, string | undefined> } = {},
+  options: {
+    cwd?: string;
+    env?: Record<string, string | undefined>;
+    stdin?: string;
+  } = {},
 ) {
   const child = Bun.spawn(
     [
@@ -50,9 +54,15 @@ async function runCli(
       cwd: options.cwd || process.cwd(),
       env: options.env,
       stderr: "pipe",
+      stdin: options.stdin === undefined ? "ignore" : "pipe",
       stdout: "pipe",
     },
   );
+  if (options.stdin !== undefined) {
+    if (!child.stdin) throw new Error("Expected piped CLI stdin.");
+    child.stdin.write(options.stdin);
+    child.stdin.end();
+  }
   return {
     exitCode: await child.exited,
     output: `${await new Response(child.stdout).text()}\n${await new Response(child.stderr).text()}`,
@@ -382,6 +392,92 @@ test("debug prompt output includes the advisor command", async () => {
     "amp --mode rush --effort low --execute 'say hi'",
   );
   expect(result.output).toContain("advisor ran");
+});
+
+test("prompt execution reads prompt from a file", async () => {
+  const promptFile = path.join(
+    await mkdtemp(path.join(tmpdir(), "second-advisor-prompt-")),
+    "prompt.md",
+  );
+  const prompt = "Review this diff:\n- keep the API stable\n- check errors\n";
+  await Bun.write(promptFile, prompt);
+  const fixture = await createCliFixture(
+    { advisor: "amp", model: "rush", thinking: "low" },
+    "amp",
+    "#!/bin/sh\nprintf '%s\\n' \"$@\"\n",
+  );
+
+  const result = await runCli(["--file", promptFile], {
+    env: {
+      ...process.env,
+      HOME: fixture.home,
+      PATH: fixture.bin,
+    },
+  });
+
+  expect(result.exitCode).toBe(0);
+  expect(result.output).toContain(prompt);
+});
+
+test("prompt execution reads prompt from stdin", async () => {
+  const prompt = "Review stdin input:\n- preserve newlines\n- keep context\n";
+  const fixture = await createCliFixture(
+    { advisor: "amp", model: "rush", thinking: "low" },
+    "amp",
+    "#!/bin/sh\nprintf '%s\\n' \"$@\"\n",
+  );
+
+  const result = await runCli(["--stdin"], {
+    env: {
+      ...process.env,
+      HOME: fixture.home,
+      PATH: fixture.bin,
+    },
+    stdin: prompt,
+  });
+
+  expect(result.exitCode).toBe(0);
+  expect(result.output).toContain(prompt);
+});
+
+test("prompt input sources cannot be combined", async () => {
+  const result = await runCli(["--stdin", "--file", "prompt.txt"], {
+    stdin: "prompt",
+  });
+
+  expect(result.exitCode).toBe(1);
+  expect(result.output).toContain("--stdin and --file cannot be combined.");
+});
+
+test("stdin prompt input cannot be combined with positional input", async () => {
+  const result = await runCli(["--stdin", "positional prompt"], {
+    stdin: "prompt",
+  });
+
+  expect(result.exitCode).toBe(1);
+  expect(result.output).toContain(
+    "Prompt input flags cannot be combined with positional input.",
+  );
+});
+
+test("stdin prompt input cannot be empty", async () => {
+  const result = await runCli(["--stdin"], { stdin: "" });
+
+  expect(result.exitCode).toBe(1);
+  expect(result.output).toContain("Prompt input is empty.");
+});
+
+test("file prompt input cannot be empty", async () => {
+  const promptFile = path.join(
+    await mkdtemp(path.join(tmpdir(), "second-advisor-prompt-")),
+    "prompt.md",
+  );
+  await Bun.write(promptFile, "");
+
+  const result = await runCli(["--file", promptFile]);
+
+  expect(result.exitCode).toBe(1);
+  expect(result.output).toContain("Prompt input is empty.");
 });
 
 test("prompt execution marks advisor subprocesses", async () => {
