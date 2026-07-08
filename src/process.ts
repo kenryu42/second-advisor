@@ -49,7 +49,7 @@ export function runCommand(
 
       if (options.timeoutMs !== undefined) {
         timeout = setTimeout(() => {
-          child.kill();
+          child.kill("SIGKILL");
           finish({
             exitCode: 1,
             stdout: Buffer.concat(stdout).toString("utf8"),

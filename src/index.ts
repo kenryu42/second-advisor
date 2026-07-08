@@ -22,6 +22,26 @@ export {
 export { parseConfig } from "./config.js";
 export { parseCliRequest } from "./routing.js";
 
+async function runPromptInput(prompt: string, options: { debug?: boolean }) {
+  if (prompt.length === 0) {
+    console.error("Prompt input is empty.");
+    process.exitCode = 1;
+    return;
+  }
+
+  await runPrompt(prompt, { debug: options.debug === true });
+}
+
+async function readPromptFile(file: string) {
+  try {
+    return await readFile(file, "utf8");
+  } catch {
+    console.error(`Could not read prompt file: ${file}`);
+    process.exitCode = 1;
+    return undefined;
+  }
+}
+
 async function main() {
   const program = new Command()
     .name("second-advisor")
@@ -92,26 +112,14 @@ Examples:
   }
 
   if (options.stdin === true) {
-    const prompt = await Bun.stdin.text();
-    if (prompt.length === 0) {
-      console.error("Prompt input is empty.");
-      process.exitCode = 1;
-      return;
-    }
-
-    await runPrompt(prompt, { debug: options.debug === true });
+    await runPromptInput(await Bun.stdin.text(), options);
     return;
   }
 
   if (options.file !== undefined) {
-    const prompt = await readFile(options.file, "utf8");
-    if (prompt.length === 0) {
-      console.error("Prompt input is empty.");
-      process.exitCode = 1;
-      return;
-    }
-
-    await runPrompt(prompt, { debug: options.debug === true });
+    const prompt = await readPromptFile(options.file);
+    if (prompt === undefined) return;
+    await runPromptInput(prompt, options);
     return;
   }
 

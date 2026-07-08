@@ -482,6 +482,18 @@ test("file prompt input cannot be empty", async () => {
   expect(result.output).toContain("Prompt input is empty.");
 });
 
+test("file prompt input reports unreadable files", async () => {
+  const promptFile = path.join(
+    await mkdtemp(path.join(tmpdir(), "second-advisor-prompt-")),
+    "missing.md",
+  );
+
+  const result = await runCli(["--file", promptFile]);
+
+  expect(result.exitCode).toBe(1);
+  expect(result.output).toContain(`Could not read prompt file: ${promptFile}`);
+});
+
 test("prompt execution marks advisor subprocesses", async () => {
   const fixture = await createCliFixture(
     { advisor: "amp", model: "rush", thinking: "low" },
@@ -841,6 +853,13 @@ test("formats setup diffs without color", () => {
  # Instructions
  
 -old
++new`);
+});
+
+test("formats setup diffs for an empty original file", () => {
+  expect(formatSetupDiff("AGENTS.md", "", "new\n", false)).toBe(`--- AGENTS.md
++++ AGENTS.md
+@@ -0,0 +1,1 @@
 +new`);
 });
 

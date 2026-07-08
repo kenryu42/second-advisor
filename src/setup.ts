@@ -377,13 +377,14 @@ export function formatSetupDiff(
   const newChangeEnd = newLines.length - suffixLength;
   const oldHunkEnd = Math.min(oldLines.length, oldChangeEnd + context);
   const newHunkEnd = Math.min(newLines.length, newChangeEnd + context);
+  const oldRangeStart = oldLines.length === 0 ? 0 : hunkStart + 1;
 
   return [
     colorDiffLine(`--- ${fileName}`, color),
     colorDiffLine(`+++ ${fileName}`, color),
     colorDiffLine(
       "@@ -" +
-        (hunkStart + 1) +
+        oldRangeStart +
         "," +
         (oldHunkEnd - hunkStart) +
         " +" +
