@@ -38,7 +38,7 @@ export function runCommand(
       );
       child.on("close", (code) =>
         resolve({
-          exitCode: code || 0,
+          exitCode: code ?? 1,
           stdout: Buffer.concat(stdout).toString("utf8"),
           stderr: Buffer.concat(stderr).toString("utf8"),
         }),

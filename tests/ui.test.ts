@@ -403,6 +403,42 @@ test("prompt execution marks advisor subprocesses", async () => {
   expect(result.output).toContain("SECOND_ADVISOR=1");
 });
 
+test("prompt execution forwards advisor exit codes", async () => {
+  const fixture = await createCliFixture(
+    { advisor: "amp", model: "rush", thinking: "low" },
+    "amp",
+    "#!/bin/sh\nexit 37\n",
+  );
+
+  const result = await runCli(["say hi"], {
+    env: {
+      ...process.env,
+      HOME: fixture.home,
+      PATH: fixture.bin,
+    },
+  });
+
+  expect(result.exitCode).toBe(37);
+});
+
+test("prompt execution treats advisor signal death as failure", async () => {
+  const fixture = await createCliFixture(
+    { advisor: "amp", model: "rush", thinking: "low" },
+    "amp",
+    "#!/bin/sh\nkill -TERM $$\n",
+  );
+
+  const result = await runCli(["say hi"], {
+    env: {
+      ...process.env,
+      HOME: fixture.home,
+      PATH: fixture.bin,
+    },
+  });
+
+  expect(result.exitCode).not.toBe(0);
+});
+
 test("second advisor review instructions wait for long-running reviews", () => {
   expect(secondAdvisorReviewBlock).toContain("<!-- second-advisor:start -->");
   expect(secondAdvisorReviewBlock).toContain(
