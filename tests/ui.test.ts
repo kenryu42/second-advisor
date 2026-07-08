@@ -4,16 +4,18 @@ import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import type { Config } from "../src/advisors.js";
 import {
+  formatSetupDiff,
+  secondAdvisorReviewBlock,
+  setupSecondAdvisorReview,
+} from "../src/setup.js";
+import {
   appTitle,
   formatAdvisorDoctorTable,
   formatAdvisorDoctorVersions,
-  formatSetupDiff,
   formatStatus,
   getInstalledAdvisorChoices,
   normalizeVersionOutput,
   runWithLoader,
-  secondAdvisorReviewBlock,
-  setupSecondAdvisorReview,
 } from "../src/ui.js";
 
 async function createCliFixture(
