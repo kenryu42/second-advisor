@@ -537,8 +537,14 @@ test("prompt execution treats advisor signal death as failure", async () => {
   expect(result.exitCode).not.toBe(0);
 });
 
-test("second advisor review instructions wait for long-running reviews", () => {
+test("second advisor review instructions reserve reviews for complex work", () => {
   expect(secondAdvisorReviewBlock).toContain("<!-- second-advisor:start -->");
+  expect(secondAdvisorReviewBlock).toContain(
+    "For complex or high-risk work, ask for a second opinion before the final response.",
+  );
+  expect(secondAdvisorReviewBlock).toContain(
+    "Do not run second-advisor merely because a task includes code edits.",
+  );
   expect(secondAdvisorReviewBlock).toContain(
     "Wait for the second-advisor command to finish as long as it is still running without crashing or outputting an error, even if it produces no output for a long time.",
   );
@@ -550,6 +556,9 @@ test("second advisor review instructions wait for long-running reviews", () => {
   );
   expect(secondAdvisorReviewBlock).toContain("<!-- second-advisor:end -->");
   expect(secondAdvisorReviewBlock).not.toContain("blocking forever");
+  expect(secondAdvisorReviewBlock).not.toContain(
+    "After completing substantial work",
+  );
 });
 
 test("setup appends second advisor review instructions to AGENTS.md", async () => {

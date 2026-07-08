@@ -243,7 +243,7 @@ Behavior:
 - Exits with code `1` if any file cannot be updated safely.
 - Does not search parent directories.
 
-The appended block tells agents to ask for a second opinion after substantial work and to use:
+The appended block tells agents to use second-advisor selectively for complex or high-risk work and to run:
 
 ```sh
 second-advisor "<review prompt>"
